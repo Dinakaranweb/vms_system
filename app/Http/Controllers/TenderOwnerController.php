@@ -1,0 +1,227 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Mail\CommitteeAssignedMail;
+use App\Models\Tender;
+use App\Models\User;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
+use Spatie\Permission\Models\Role;
+
+class TenderOwnerController extends Controller
+{
+   public function dashboard()
+    {
+        $user = auth()->user();
+        $tenders = $user->ownedTenders()->withCount('applications')->latest()->paginate(10);
+        
+        $stats = [
+            'total' => $user->ownedTenders()->count(),
+            'published' => $user->ownedTenders()->where('status', 'published')->count(),
+            'draft' => $user->ownedTenders()->where('status', 'draft')->count(),
+            'closed' => $user->ownedTenders()->where('status', 'closed')->count(),
+            'total_applications' => $user->ownedTenders()->withCount('applications')->get()->sum('applications_count'),
+        ];
+        
+        return view('tender-owner.dashboard', compact('tenders', 'stats'));
+    }
+    
+    public function showCommittee($id)
+    {
+        $tender = Tender::with('committeeMembers')->findOrFail($id);
+        $isAdmin = auth()->user()->hasAnyRole(['admin', 'super-admin']);
+
+        if (!$isAdmin && $tender->owner_id !== auth()->id()) {
+            abort(403, 'You do not have permission to manage committee for this tender.');
+        }
+
+        $users = User::whereDoesntHave('committeeTenders', function ($q) use ($id) {
+            $q->where('tender_id', $id);
+        })->whereHas('roles', function ($q) {
+            $q->whereIn('name', ['admin', 'tender-owner', 'committee-member']);
+        })->get();
+
+        $availableRoles = Role::whereIn('name', ['admin', 'tender-owner', 'committee-member'])->get();
+
+        if ($isAdmin) {
+            $segment = request()->segment(1); // 'admin' or 'super-admin'
+            return view('admin.tenders.committee', compact('tender', 'users', 'availableRoles', 'segment'));
+        }
+
+        return view('tender-owner.committee', compact('tender', 'users', 'availableRoles'));
+    }
+    
+    public function addCommitteeMember(Request $request, $id)
+    {
+        $tender = Tender::findOrFail($id);
+
+        if ($tender->owner_id !== auth()->id() && !auth()->user()->hasAnyRole(['admin', 'super-admin'])) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+        
+        $request->validate([
+            'user_id' => 'required|exists:users,id',
+            'role' => 'required|in:chairman,member,observer,technical_expert,financial_expert',
+            'designation' => 'nullable|string|max:255',
+            'permissions' => 'nullable|array',
+        ]);
+        
+        DB::beginTransaction();
+        
+        try {
+            $tender->committeeMembers()->attach($request->user_id, [
+                'role' => $request->role,
+                'designation' => $request->designation,
+                'permissions' => json_encode($request->permissions ?? []),
+                'added_by' => auth()->id(),
+                'is_active' => true,
+            ]);
+
+            DB::commit();
+
+            // Email the member
+            try {
+                $member = User::findOrFail($request->user_id);
+                Mail::to($member->email)->send(new CommitteeAssignedMail($member, $tender, $request->role, $request->designation));
+            } catch (\Exception $e) {
+                \Log::error('Committee assignment email failed: ' . $e->getMessage());
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Committee member added successfully! A notification email has been sent.'
+            ]);
+        } catch (\Exception $e) {
+            DB::rollback();
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to add committee member: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    public function removeCommitteeMember($tenderId, $userId)
+    {
+        $tender = Tender::findOrFail($tenderId);
+
+        if ($tender->owner_id !== auth()->id() && !auth()->user()->hasAnyRole(['admin', 'super-admin'])) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+        
+        try {
+            $tender->committeeMembers()->detach($userId);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Committee member removed successfully!'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to remove committee member'
+            ], 500);
+        }
+    }
+    
+    /**
+     * Create a brand-new user and immediately add them to the tender committee.
+     */
+    public function createAndAddCommitteeMember(Request $request, $id)
+    {
+        $tender = Tender::findOrFail($id);
+
+        if ($tender->owner_id !== auth()->id() && !auth()->user()->hasAnyRole(['admin', 'super-admin'])) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+
+        $request->validate([
+            'name'         => 'required|string|max:255',
+            'email'        => 'required|email|unique:users,email',
+            'password'     => 'required|string|min:8',
+            'spatie_role'  => 'required|string',
+            'role'         => 'required|in:chairman,member,observer,technical_expert,financial_expert',
+            'designation'  => 'nullable|string|max:255',
+            'permissions'  => 'nullable|array',
+        ]);
+
+        DB::beginTransaction();
+        try {
+            // Ensure committee-member role exists
+            $spatieRoleName = $request->spatie_role;
+            Role::firstOrCreate(['name' => $spatieRoleName, 'guard_name' => 'web']);
+
+            $user = User::create([
+                'name'      => $request->name,
+                'email'     => $request->email,
+                'password'  => Hash::make($request->password),
+                'is_active' => true,
+            ]);
+            $user->assignRole($spatieRoleName);
+
+            $tender->committeeMembers()->attach($user->id, [
+                'role'        => $request->role,
+                'designation' => $request->designation,
+                'permissions' => json_encode($request->permissions ?? []),
+                'added_by'    => auth()->id(),
+                'is_active'   => true,
+            ]);
+
+            DB::commit();
+
+            // Email the new user
+            try {
+                Mail::to($user->email)->send(new CommitteeAssignedMail($user, $tender, $request->role, $request->designation));
+            } catch (\Exception $e) {
+                \Log::error('Committee assignment email failed: ' . $e->getMessage());
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => "User '{$user->name}' created and added to committee! A notification email has been sent.",
+                'user'    => ['id' => $user->id, 'name' => $user->name, 'email' => $user->email],
+            ]);
+        } catch (\Exception $e) {
+            DB::rollback();
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create user: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function updateCommitteeMember(Request $request, $tenderId, $userId)
+    {
+        $tender = Tender::findOrFail($tenderId);
+
+        if ($tender->owner_id !== auth()->id() && !auth()->user()->hasAnyRole(['admin', 'super-admin'])) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+        
+        $request->validate([
+            'role' => 'required|in:chairman,member,observer,technical_expert,financial_expert',
+            'designation' => 'nullable|string|max:255',
+            'is_active' => 'boolean',
+        ]);
+        
+        try {
+            $tender->committeeMembers()->updateExistingPivot($userId, [
+                'role' => $request->role,
+                'designation' => $request->designation,
+                'is_active' => $request->is_active ?? true,
+            ]);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Committee member updated successfully!'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update committee member'
+            ], 500);
+        }
+    }
+}

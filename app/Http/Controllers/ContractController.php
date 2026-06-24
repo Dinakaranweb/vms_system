@@ -18,17 +18,31 @@ class ContractController extends Controller
      */
     public function index()
     {
-        $contracts = Contract::with('tender', 'vendor')->orderBy('created_at', 'desc')->paginate(10);
-        
+        $user = auth()->user();
+
+        if ($user->hasRole('super-admin')) {
+            $rp = 'super-admin';
+            $q  = Contract::with('tender', 'vendor');
+        } elseif ($user->hasRole('tender-owner')) {
+            $rp      = 'tender-owner';
+            $ownedIds = $user->ownedTenders()->pluck('id');
+            $q  = Contract::with('tender', 'vendor')->whereIn('tender_id', $ownedIds);
+        } else {
+            $rp = 'admin';
+            $q  = Contract::with('tender', 'vendor');
+        }
+
+        $contracts = (clone $q)->orderBy('created_at', 'desc')->paginate(10);
+
         $stats = [
-            'total' => Contract::count(),
-            'active' => Contract::where('status', 'active')->count(),
-            'expired' => Contract::where('status', 'expired')->count(),
-            'terminated' => Contract::where('status', 'terminated')->count(),
-            'total_value' => Contract::where('status', 'active')->sum('contract_value'),
+            'total'       => (clone $q)->count(),
+            'active'      => (clone $q)->where('status', 'active')->count(),
+            'expired'     => (clone $q)->where('status', 'expired')->count(),
+            'terminated'  => (clone $q)->where('status', 'terminated')->count(),
+            'total_value' => (clone $q)->where('status', 'active')->sum('contract_value'),
         ];
-        
-        return view('admin.contracts.index', compact('contracts', 'stats'));
+
+        return view('admin.contracts.index', compact('contracts', 'stats', 'rp'));
     }
 
     /**
@@ -37,7 +51,20 @@ class ContractController extends Controller
     public function show($id)
     {
         $contract = Contract::with('tender', 'vendor', 'extensions')->findOrFail($id);
-        return view('admin.contracts.show', compact('contract'));
+        $user     = auth()->user();
+
+        if ($user->hasRole('super-admin')) {
+            $rp = 'super-admin';
+        } elseif ($user->hasRole('tender-owner')) {
+            $rp = 'tender-owner';
+            if ($contract->tender && $contract->tender->owner_id !== $user->id) {
+                abort(403, 'You do not have permission to view this contract.');
+            }
+        } else {
+            $rp = 'admin';
+        }
+
+        return view('admin.contracts.show', compact('contract', 'rp'));
     }
 
     /**

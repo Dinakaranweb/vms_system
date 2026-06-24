@@ -76,14 +76,18 @@
 
         {{-- Details grid --}}
         <div class="p-6 grid grid-cols-2 md:grid-cols-4 gap-4 border-b border-gray-100">
+            @if($tender->require_estimated_value && $tender->estimated_value > 0)
             <div class="text-center">
                 <div class="text-xs text-gray-500 mb-0.5">Estimated Value</div>
                 <div class="font-bold text-green-700 text-sm">{{ $tender->getFormattedEstimatedValue() }}</div>
             </div>
+            @endif
+            @if($tender->require_emd && $tender->emda_amount > 0)
             <div class="text-center">
                 <div class="text-xs text-gray-500 mb-0.5">EMD Amount</div>
                 <div class="font-bold text-orange-600 text-sm">{{ $tender->getFormattedEmdaAmount() }}</div>
             </div>
+            @endif
             <div class="text-center">
                 <div class="text-xs text-gray-500 mb-0.5">Published</div>
                 <div class="font-semibold text-gray-700 text-sm">{{ $tender->published_date?->format('d M Y') ?? '—' }}</div>
@@ -409,13 +413,13 @@
                 </div>
                 <div class="p-6 space-y-6">
 
-                    {{-- Bid Amount (conditional) --}}
                     @php
-                        $requireBid  = $tender->require_bid_amount  ?? true;
-                        $requireTech = $tender->require_technical_bid ?? true;
-                        $requireFin  = $tender->require_financial_bid ?? true;
+                        $requireBid  = ($tender->require_bid_amount  ?? true) && $tender->isOnline();
+                        $requireTech = ($tender->require_technical_bid ?? true) && $tender->isOnline();
+                        $requireFin  = ($tender->require_financial_bid ?? true) && $tender->isOnline();
                     @endphp
 
+                    {{-- Bid Amount — online only --}}
                     @if($requireBid)
                     <div class="bg-blue-50 rounded-lg p-4">
                         <h5 class="font-semibold text-blue-800 mb-3 text-sm flex items-center gap-1">
@@ -431,59 +435,75 @@
                                         placeholder="0.00">
                                 </div>
                             </div>
+                            @if($tender->require_emd && $tender->emda_amount > 0)
                             <div class="bg-white rounded-lg p-3 border border-blue-200 flex items-center gap-3">
                                 <i class="fas fa-info-circle text-orange-500 text-lg"></i>
                                 <div>
                                     <p class="text-xs text-gray-500">EMD Required</p>
-                                    <p class="text-lg font-bold text-orange-600">₹{{ number_format($tender->emda_amount ?? 0, 2) }}</p>
+                                    <p class="text-lg font-bold text-orange-600">₹{{ number_format($tender->emda_amount, 2) }}</p>
                                 </div>
                             </div>
+                            @endif
                         </div>
                     </div>
-                    @else
-                    {{-- Hidden zero bid amount so form can still submit --}}
+                    @elseif($tender->isOnline())
                     <input type="hidden" name="bid_amount" value="0">
                     @endif
 
-                    {{-- Technical Proposal (conditional) --}}
-                    @if($requireTech)
+                    {{-- Technical Proposal — online only --}}
+                    @if($tender->isOnline())
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">
-                            Technical Proposal <span class="text-red-500">*</span>
+                            Technical Proposal
+                            @if($requireTech)<span class="text-red-500">*</span>@else<span class="text-xs text-gray-400 font-normal">(optional)</span>@endif
                         </label>
-                        <textarea name="technical_proposal" rows="5" required
-                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
-                            placeholder="Describe your technical approach, methodology, and capabilities..."></textarea>
+                        {{-- Toggle: Write or Upload --}}
+                        <div class="flex gap-3 mb-2">
+                            <button type="button" onclick="toggleProposal('tech','write')"
+                                id="techWriteBtn"
+                                class="px-3 py-1 text-xs rounded-full bg-green-600 text-white">Write</button>
+                            <button type="button" onclick="toggleProposal('tech','upload')"
+                                id="techUploadBtn"
+                                class="px-3 py-1 text-xs rounded-full bg-gray-200 text-gray-700">Upload File</button>
+                        </div>
+                        <div id="techWriteBox">
+                            <textarea name="technical_proposal" id="techProposalEditor" rows="5"
+                                {{ $requireTech ? 'required' : '' }}
+                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                                placeholder="Describe your technical approach, methodology, and capabilities..."></textarea>
+                        </div>
+                        <div id="techUploadBox" class="hidden">
+                            <input type="file" name="technical_proposal_file" accept=".pdf,.doc,.docx"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                            <p class="text-xs text-gray-400 mt-1">PDF or Word document, max 10 MB</p>
+                        </div>
                     </div>
-                    @else
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">
-                            Technical Proposal <span class="text-xs text-gray-400 font-normal">(optional)</span>
-                        </label>
-                        <textarea name="technical_proposal" rows="3"
-                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
-                            placeholder="Describe your technical approach (optional)..."></textarea>
-                    </div>
-                    @endif
 
-                    {{-- Financial Proposal (conditional) --}}
-                    @if($requireFin)
+                    {{-- Financial Proposal — online only --}}
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">
-                            Financial Proposal <span class="text-red-500">*</span>
+                            Financial Proposal
+                            @if($requireFin)<span class="text-red-500">*</span>@else<span class="text-xs text-gray-400 font-normal">(optional)</span>@endif
                         </label>
-                        <textarea name="financial_proposal" rows="3" required
-                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
-                            placeholder="Provide financial breakdown, payment terms, and cost structure..."></textarea>
-                    </div>
-                    @else
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">
-                            Financial Proposal <span class="text-xs text-gray-400 font-normal">(optional)</span>
-                        </label>
-                        <textarea name="financial_proposal" rows="2"
-                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
-                            placeholder="Provide financial breakdown (optional)..."></textarea>
+                        <div class="flex gap-3 mb-2">
+                            <button type="button" onclick="toggleProposal('fin','write')"
+                                id="finWriteBtn"
+                                class="px-3 py-1 text-xs rounded-full bg-green-600 text-white">Write</button>
+                            <button type="button" onclick="toggleProposal('fin','upload')"
+                                id="finUploadBtn"
+                                class="px-3 py-1 text-xs rounded-full bg-gray-200 text-gray-700">Upload File</button>
+                        </div>
+                        <div id="finWriteBox">
+                            <textarea name="financial_proposal" id="finProposalEditor" rows="4"
+                                {{ $requireFin ? 'required' : '' }}
+                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                                placeholder="Provide financial breakdown, payment terms, and cost structure..."></textarea>
+                        </div>
+                        <div id="finUploadBox" class="hidden">
+                            <input type="file" name="financial_proposal_file" accept=".pdf,.doc,.docx"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                            <p class="text-xs text-gray-400 mt-1">PDF or Word document, max 10 MB</p>
+                        </div>
                     </div>
                     @endif
 
@@ -541,12 +561,12 @@
                 </div>
             </div>
 
-            {{-- Terms --}}
+            {{-- Terms / Declaration --}}
             <div class="bg-white rounded-xl shadow-sm p-5 mb-6">
                 <label class="flex items-start gap-3 cursor-pointer">
                     <input type="checkbox" id="terms_agree" required class="mt-1 flex-shrink-0 rounded">
                     <div class="text-sm text-gray-700">
-                        <span class="font-semibold">I confirm that:</span>
+                        <span class="font-semibold">Declaration — I confirm that:</span>
                         <ul class="list-disc list-inside mt-1 text-gray-600 space-y-0.5">
                             <li>All information provided is accurate and complete</li>
                             <li>I have read and understood the tender terms and conditions</li>
@@ -554,8 +574,19 @@
                             <li>I am authorised to submit this application on behalf of the company</li>
                             <li>I understand that false information may lead to disqualification</li>
                             @if($tender->isPostal())
-                            <li>I will send physical documents to the postal address within 7 days</li>
+                            <li>
+                                I will send physical documents to the postal address
+                                @if($tender->postal_receipt_deadline)
+                                    on or before <strong>{{ $tender->postal_receipt_deadline->format('d M Y') }}</strong>
+                                @else
+                                    before the submission deadline
+                                @endif
+                                @if($tender->postal_address)
+                                    at: <strong>{{ $tender->postal_address }}</strong>
+                                @endif
+                            </li>
                             @endif
+                            <li>VMRF-DU reserves the right to accept or reject any or all proposals without assigning any reason.</li>
                         </ul>
                     </div>
                 </label>
@@ -569,8 +600,7 @@
                 </button>
                 <button type="submit" id="submitBtn" disabled
                     class="px-8 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
-                    <i class="fas fa-paper-plane"></i>
-                    {{ $tender->isPostal() ? 'Submit & Get Postal Instructions' : 'Submit Application' }}
+                    <i class="fas fa-paper-plane"></i> Submit
                 </button>
             </div>
         </form>
@@ -690,6 +720,24 @@ if (hasQuestions) {
     });
 } else {
     activateStep(2);
+}
+
+function toggleProposal(type, mode) {
+    const writeBox = document.getElementById(type + 'WriteBox');
+    const uploadBox = document.getElementById(type + 'UploadBox');
+    const writeBtn = document.getElementById(type + 'WriteBtn');
+    const uploadBtn = document.getElementById(type + 'UploadBtn');
+    if (mode === 'write') {
+        writeBox.classList.remove('hidden');
+        uploadBox.classList.add('hidden');
+        writeBtn.className = 'px-3 py-1 text-xs rounded-full bg-green-600 text-white';
+        uploadBtn.className = 'px-3 py-1 text-xs rounded-full bg-gray-200 text-gray-700';
+    } else {
+        writeBox.classList.add('hidden');
+        uploadBox.classList.remove('hidden');
+        writeBtn.className = 'px-3 py-1 text-xs rounded-full bg-gray-200 text-gray-700';
+        uploadBtn.className = 'px-3 py-1 text-xs rounded-full bg-green-600 text-white';
+    }
 }
 
 function copyEligibilityAnswers() {

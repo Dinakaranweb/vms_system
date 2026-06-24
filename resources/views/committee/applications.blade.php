@@ -78,7 +78,7 @@
                             <p class="text-xs text-gray-400">{{ Str::limit($app->tender->title, 35) }}</p>
                         </td>
                         <td class="px-4 py-3.5 text-sm text-gray-700">
-                            {{ $app->bid_amount ? '₹'.number_format($app->bid_amount, 2) : '—' }}
+                            {{ ($app->bid_amount !== null && $app->bid_amount > 0) ? '₹'.number_format($app->bid_amount, 2) : 'N/A' }}
                         </td>
                         <td class="px-4 py-3.5">
                             @php

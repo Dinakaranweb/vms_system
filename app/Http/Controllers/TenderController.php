@@ -7,7 +7,6 @@ use App\Models\TenderDocument;
 use App\Models\EligibilityQuestion;
 use App\Models\Category;
 use App\Mail\TenderPublishedMail;
-use App\Mail\TenderCreatedAdminMail;
 use App\Mail\TenderClosedMail;
 use App\Models\TenderApplication;
 use App\Models\Vendor;
@@ -119,11 +118,16 @@ class TenderController extends Controller
                 'status' => 'draft',
                 'created_by' => auth()->id(),
                 'owner_id' => auth()->id(),
-                'require_bid_amount'       => $request->boolean('require_bid_amount'),
-                'require_technical_bid'    => $request->boolean('require_technical_bid'),
-                'require_financial_bid'    => $request->boolean('require_financial_bid'),
-                'require_contract_signing' => $request->boolean('require_contract_signing', true),
-                'notify_specific_vendors'  => $request->filled('notify_specific_vendors')
+                'require_bid_amount'          => $request->boolean('require_bid_amount'),
+                'require_technical_bid'       => $request->boolean('require_technical_bid'),
+                'require_financial_bid'       => $request->boolean('require_financial_bid'),
+                'require_contract_signing'    => $request->boolean('require_contract_signing'),
+                'require_emd'                 => $request->boolean('require_emd'),
+                'require_estimated_value'     => $request->boolean('require_estimated_value'),
+                'email_notifications_enabled' => $request->boolean('email_notifications_enabled'),
+                'emda_amount'                 => $request->boolean('require_emd') && $request->filled('emda_amount') ? $request->emda_amount : null,
+                'estimated_value'             => $request->boolean('require_estimated_value') && $request->filled('estimated_value') ? $request->estimated_value : null,
+                'notify_specific_vendors'     => $request->filled('notify_specific_vendors')
                     ? array_values(array_filter(array_map('intval', explode(',', $request->notify_specific_vendors))))
                     : null,
             ]);
@@ -252,13 +256,18 @@ class TenderController extends Controller
 
         try {
             $tender->update(array_merge($validated, [
-                'eligibility_criteria'     => $validated['eligibility_criteria'] ?? '',
-                'is_private'               => $request->boolean('is_private'),
-                'postal_receipt_deadline'  => $request->filled('postal_receipt_deadline') ? $request->postal_receipt_deadline : null,
-                'require_bid_amount'       => $request->boolean('require_bid_amount'),
-                'require_technical_bid'    => $request->boolean('require_technical_bid'),
-                'require_financial_bid'    => $request->boolean('require_financial_bid'),
-                'require_contract_signing' => $request->boolean('require_contract_signing', true),
+                'eligibility_criteria'        => $validated['eligibility_criteria'] ?? '',
+                'is_private'                  => $request->boolean('is_private'),
+                'postal_receipt_deadline'     => $request->filled('postal_receipt_deadline') ? $request->postal_receipt_deadline : null,
+                'require_bid_amount'          => $request->boolean('require_bid_amount'),
+                'require_technical_bid'       => $request->boolean('require_technical_bid'),
+                'require_financial_bid'       => $request->boolean('require_financial_bid'),
+                'require_contract_signing'    => $request->boolean('require_contract_signing'),
+                'require_emd'                 => $request->boolean('require_emd'),
+                'require_estimated_value'     => $request->boolean('require_estimated_value'),
+                'email_notifications_enabled' => $request->boolean('email_notifications_enabled'),
+                'emda_amount'                 => $request->boolean('require_emd') && $request->filled('emda_amount') ? $request->emda_amount : null,
+                'estimated_value'             => $request->boolean('require_estimated_value') && $request->filled('estimated_value') ? $request->estimated_value : null,
             ]));
 
             // Handle new document uploads
@@ -440,16 +449,18 @@ if ($request->has('new_questions')) {
             $tender->update(['status' => 'closed', 'closed_reason' => $reason]);
 
             // Notify vendors who applied
-            $vendorIds = TenderApplication::where('tender_id', $tender->id)
-                ->whereNotNull('vendor_id')
-                ->pluck('vendor_id')
-                ->unique();
-            $emails = Vendor::whereIn('id', $vendorIds)->pluck('email');
-            foreach ($emails as $email) {
-                try {
-                    Mail::to($email)->send(new TenderClosedMail($tender, $reason));
-                } catch (\Exception $mailEx) {
-                    \Log::error('TenderClosedMail failed to ' . $email . ': ' . $mailEx->getMessage());
+            if ($tender->email_notifications_enabled ?? false) {
+                $vendorIds = TenderApplication::where('tender_id', $tender->id)
+                    ->whereNotNull('vendor_id')
+                    ->pluck('vendor_id')
+                    ->unique();
+                $emails = Vendor::whereIn('id', $vendorIds)->pluck('email');
+                foreach ($emails as $email) {
+                    try {
+                        Mail::to($email)->send(new TenderClosedMail($tender, $reason));
+                    } catch (\Exception $mailEx) {
+                        \Log::error('TenderClosedMail failed to ' . $email . ': ' . $mailEx->getMessage());
+                    }
                 }
             }
 
@@ -765,10 +776,15 @@ public function ownerIndex()
             'status' => 'draft',
             'created_by' => $user->id,
             'owner_id' => $user->id,
-            'require_bid_amount'       => $request->boolean('require_bid_amount'),
-            'require_technical_bid'    => $request->boolean('require_technical_bid'),
-            'require_financial_bid'    => $request->boolean('require_financial_bid'),
-            'require_contract_signing' => $request->boolean('require_contract_signing', true),
+            'require_bid_amount'          => $request->boolean('require_bid_amount'),
+            'require_technical_bid'       => $request->boolean('require_technical_bid'),
+            'require_financial_bid'       => $request->boolean('require_financial_bid'),
+            'require_contract_signing'    => $request->boolean('require_contract_signing'),
+            'require_emd'                 => $request->boolean('require_emd'),
+            'require_estimated_value'     => $request->boolean('require_estimated_value'),
+            'email_notifications_enabled' => $request->boolean('email_notifications_enabled', true),
+            'emda_amount'                 => $request->boolean('require_emd') && $request->filled('emda_amount') ? $request->emda_amount : null,
+            'estimated_value'             => $request->boolean('require_estimated_value') && $request->filled('estimated_value') ? $request->estimated_value : null,
         ]);
 
         \Log::info('Tender Created - ID: ' . $tender->id . ', Owner ID: ' . $tender->owner_id);
@@ -823,18 +839,8 @@ if ($request->has('questions') && is_array($request->questions)) {
 
         DB::commit();
 
-        // Notify admins that a new tender has been created and needs review
-        try {
-            $admins = User::role(['admin', 'super-admin'])->whereNotNull('email')->get();
-            foreach ($admins as $admin) {
-                Mail::to($admin->email)->send(new TenderCreatedAdminMail($tender, $user));
-            }
-        } catch (\Exception $mailEx) {
-            \Log::warning('Admin tender notification failed: ' . $mailEx->getMessage());
-        }
-
         return redirect()->route('tender-owner.dashboard')
-            ->with('success', 'Tender created successfully! Admins have been notified for review.');
+            ->with('success', 'Tender created successfully!');
 
     } catch (\Exception $e) {
         DB::rollback();
@@ -938,17 +944,21 @@ public function ownerUpdate(Request $request, $id)
         $validated['eligibility_criteria'] = $validated['eligibility_criteria'] ?? '';
 
         $tender->update(array_merge($validated, [
-            'is_private'               => $request->boolean('is_private'),
-            'notify_specific_vendors'  => $privateVendors,
-            'notify_vendors_on_create' => $request->boolean('notify_vendors_on_create'),
-            'emda_amount'              => $request->filled('emda_amount') ? $request->emda_amount : null,
-            'opening_time'             => $request->filled('opening_time') ? $request->opening_time : null,
-            'opening_venue'            => $request->filled('opening_venue') ? $request->opening_venue : null,
-            'postal_receipt_deadline'  => $request->filled('postal_receipt_deadline') ? $request->postal_receipt_deadline : null,
-            'require_bid_amount'       => $request->boolean('require_bid_amount'),
-            'require_technical_bid'    => $request->boolean('require_technical_bid'),
-            'require_financial_bid'    => $request->boolean('require_financial_bid'),
-            'require_contract_signing' => $request->boolean('require_contract_signing', true),
+            'is_private'                  => $request->boolean('is_private'),
+            'notify_specific_vendors'     => $privateVendors,
+            'notify_vendors_on_create'    => $request->boolean('notify_vendors_on_create'),
+            'opening_time'                => $request->filled('opening_time') ? $request->opening_time : null,
+            'opening_venue'               => $request->filled('opening_venue') ? $request->opening_venue : null,
+            'postal_receipt_deadline'     => $request->filled('postal_receipt_deadline') ? $request->postal_receipt_deadline : null,
+            'require_bid_amount'          => $request->boolean('require_bid_amount'),
+            'require_technical_bid'       => $request->boolean('require_technical_bid'),
+            'require_financial_bid'       => $request->boolean('require_financial_bid'),
+            'require_contract_signing'    => $request->boolean('require_contract_signing'),
+            'require_emd'                 => $request->boolean('require_emd'),
+            'require_estimated_value'     => $request->boolean('require_estimated_value'),
+            'email_notifications_enabled' => $request->boolean('email_notifications_enabled'),
+            'emda_amount'                 => $request->boolean('require_emd') && $request->filled('emda_amount') ? $request->emda_amount : null,
+            'estimated_value'             => $request->boolean('require_estimated_value') && $request->filled('estimated_value') ? $request->estimated_value : null,
         ]));
 
         // Handle new document uploads
@@ -1100,16 +1110,18 @@ public function ownerUpdate(Request $request, $id)
             $tender->update(['status' => 'closed', 'closed_reason' => $reason]);
 
             // Notify vendors who applied
-            $vendorIds = TenderApplication::where('tender_id', $tender->id)
-                ->whereNotNull('vendor_id')
-                ->pluck('vendor_id')
-                ->unique();
-            $emails = Vendor::whereIn('id', $vendorIds)->pluck('email');
-            foreach ($emails as $email) {
-                try {
-                    Mail::to($email)->send(new TenderClosedMail($tender, $reason));
-                } catch (\Exception $mailEx) {
-                    \Log::error('TenderClosedMail failed to ' . $email . ': ' . $mailEx->getMessage());
+            if ($tender->email_notifications_enabled ?? false) {
+                $vendorIds = TenderApplication::where('tender_id', $tender->id)
+                    ->whereNotNull('vendor_id')
+                    ->pluck('vendor_id')
+                    ->unique();
+                $emails = Vendor::whereIn('id', $vendorIds)->pluck('email');
+                foreach ($emails as $email) {
+                    try {
+                        Mail::to($email)->send(new TenderClosedMail($tender, $reason));
+                    } catch (\Exception $mailEx) {
+                        \Log::error('TenderClosedMail failed to ' . $email . ': ' . $mailEx->getMessage());
+                    }
                 }
             }
 
@@ -1178,6 +1190,7 @@ public function ownerDeleteDocument($id)
      */
     private function notifyVendorsOnCreate(Tender $tender, string $mode, ?string $specificVendorIds): void
     {
+        if (!($tender->email_notifications_enabled ?? false)) return;
         $tender->loadMissing('categories.vendors');
 
         if ($mode === 'specific' && $specificVendorIds) {
@@ -1215,6 +1228,7 @@ public function ownerDeleteDocument($id)
      */
     private function notifyVendorsOnPublish(Tender $tender): void
     {
+        if (!($tender->email_notifications_enabled ?? false)) return;
         $specificIds = array_filter(
             array_map('intval', (array) ($tender->notify_specific_vendors ?? []))
         );

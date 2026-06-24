@@ -38,9 +38,8 @@
   @endif
 
   @php
-      $downloadRoute = str_starts_with(request()->route()->getName(), 'super-admin.')
-          ? route('super-admin.contracts.work-order.download', $contract->id)
-          : route('admin.contracts.work-order.download', $contract->id);
+      $rp            = $rp ?? (request()->is('super-admin/*') ? 'super-admin' : 'admin');
+      $downloadRoute = route("{$rp}.contracts.work-order.download", $contract->id);
   @endphp
   <form id="orderForm" method="POST" action="{{ $downloadRoute }}">
     @csrf

@@ -20,7 +20,9 @@ class TenderApplication extends Model
         'emda_paid_amount',
         'emda_reference_number',
         'technical_proposal',
+        'technical_proposal_file',
         'financial_proposal',
+        'financial_proposal_file',
         'documents',
         'status',
         'evaluation_scores',
@@ -87,6 +89,11 @@ class TenderApplication extends Model
     public function contract()
     {
         return $this->hasOne(Contract::class);
+    }
+
+    public function eligibilityAnswers()
+    {
+        return $this->hasMany(EligibilityAnswer::class, 'tender_application_id');
     }
 
     // ==================== SCOPES ====================

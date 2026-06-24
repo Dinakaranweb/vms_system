@@ -38,11 +38,23 @@
         </div>
     </div>
 
+    <!-- Type Tabs -->
+    <div class="flex gap-3 mb-2">
+        <a href="{{ route('vendor.tenders') }}?type=online"
+           class="px-5 py-2 rounded-lg font-medium text-sm transition {{ ($type ?? 'online') === 'online' ? 'bg-blue-600 text-white shadow' : 'bg-white text-gray-700 border hover:bg-gray-50' }}">
+            <i class="fas fa-globe mr-1"></i> Online Tenders
+        </a>
+        <a href="{{ route('vendor.tenders') }}?type=postal"
+           class="px-5 py-2 rounded-lg font-medium text-sm transition {{ ($type ?? 'online') === 'postal' ? 'bg-yellow-500 text-white shadow' : 'bg-white text-gray-700 border hover:bg-gray-50' }}">
+            <i class="fas fa-envelope mr-1"></i> Postal Tenders
+        </a>
+    </div>
+
     <!-- Tenders List -->
     <div class="bg-white rounded-xl shadow-sm overflow-hidden">
         <div class="px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-600">
             <h3 class="text-lg font-semibold text-white">
-                <i class="fas fa-list mr-2"></i>Available Tenders
+                <i class="fas fa-list mr-2"></i>{{ ($type ?? 'online') === 'postal' ? 'Postal' : 'Online' }} Tenders
             </h3>
         </div>
         
@@ -90,8 +102,13 @@
                             </div>
                         </div>
                     </div>
-                    <div class="ml-4">
-                        <a href="{{ route('vendor.tenders.show', $tender->id) }}" 
+                    <div class="ml-4 flex flex-col items-end gap-2">
+                        @if(isset($appliedTenderIds[$tender->id]))
+                            <span class="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full">
+                                <i class="fas fa-check-circle"></i> Applied
+                            </span>
+                        @endif
+                        <a href="{{ route('vendor.tenders.show', $tender->id) }}"
                            class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
                             <i class="fas fa-eye mr-2"></i>View Details
                         </a>

@@ -48,6 +48,9 @@ class Tender extends Model
         'show_on_university',
         'university_description',
         'closed_reason',
+        'require_emd',
+        'require_estimated_value',
+        'email_notifications_enabled',
     ];
 
     protected $casts = [
@@ -70,6 +73,9 @@ class Tender extends Model
         'notify_vendors_on_create' => 'boolean',
         'notify_specific_vendors'  => 'array',
         'show_on_university'       => 'boolean',
+        'require_emd'              => 'boolean',
+        'require_estimated_value'  => 'boolean',
+        'email_notifications_enabled' => 'boolean',
     ];
 
     // Boot method to generate tender number automatically
@@ -276,7 +282,7 @@ class Tender extends Model
     public function getRemainingDays(): ?int
     {
         if (!$this->isOpen()) return null;
-        return now()->diffInDays($this->submission_deadline, false);
+        return (int) now()->diffInDays($this->submission_deadline, false);
     }
 
     public function getFormattedEstimatedValue(): string

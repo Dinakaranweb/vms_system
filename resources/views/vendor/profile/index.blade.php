@@ -147,14 +147,37 @@
                 <h3 class="font-semibold text-gray-800">Uploaded Documents</h3>
             </div>
             <div class="divide-y">
-                @foreach($vendor->registration_documents as $type => $path)
+                @foreach($vendor->registration_documents as $type => $entry)
+                @php
+                    // Normalize: plain string | {path,name} | nested [{path,name,label}]
+                    if (is_string($entry)) {
+                        $docItems = [['path' => $entry, 'label' => str_replace('_', ' ', ucfirst($type)), 'name' => null]];
+                    } elseif (is_array($entry) && isset($entry['path'])) {
+                        $docItems = [['path' => $entry['path'], 'label' => str_replace('_', ' ', ucfirst($type)), 'name' => $entry['name'] ?? null]];
+                    } elseif (is_array($entry)) {
+                        $docItems = [];
+                        foreach ($entry as $sub) {
+                            if (is_array($sub) && isset($sub['path'])) {
+                                $docItems[] = ['path' => $sub['path'], 'label' => $sub['label'] ?? str_replace('_', ' ', ucfirst($type)), 'name' => $sub['name'] ?? null];
+                            } elseif (is_string($sub)) {
+                                $docItems[] = ['path' => $sub, 'label' => str_replace('_', ' ', ucfirst($type)), 'name' => null];
+                            }
+                        }
+                    } else {
+                        $docItems = [];
+                    }
+                @endphp
+                @foreach($docItems as $doc)
                 <div class="p-4 flex justify-between items-center">
                     <div>
                         <i class="fas fa-file-pdf text-red-500 mr-2"></i>
-                        <span class="text-gray-700">{{ str_replace('_', ' ', ucfirst($type)) }}</span>
+                        <span class="text-gray-700">{{ $doc['label'] }}</span>
+                        @if($doc['name'])
+                            <span class="text-xs text-gray-400 ml-1">({{ $doc['name'] }})</span>
+                        @endif
                     </div>
                     <div class="space-x-2">
-                        <a href="{{ Storage::url($path) }}" target="_blank" class="text-blue-600 hover:text-blue-800">
+                        <a href="{{ Storage::url($doc['path']) }}" target="_blank" class="text-blue-600 hover:text-blue-800">
                             <i class="fas fa-download"></i>
                         </a>
                         <button onclick="deleteDocument('{{ $type }}')" class="text-red-600 hover:text-red-800">
@@ -162,6 +185,7 @@
                         </button>
                     </div>
                 </div>
+                @endforeach
                 @endforeach
             </div>
         </div>

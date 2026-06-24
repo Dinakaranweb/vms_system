@@ -46,7 +46,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#f4f6f9;margin:0;padding
             <div class="row"><strong>Company Name</strong><span>{{ $application->vendor->company_name }}</span></div>
             <div class="row"><strong>Vendor Code</strong><span>{{ $application->vendor->vendor_code }}</span></div>
             <div class="row"><strong>Email</strong><span>{{ $application->vendor->email }}</span></div>
-            <div class="row"><strong>Bid Amount</strong><span>₹ {{ number_format($application->bid_amount, 2) }}</span></div>
+            <div class="row"><strong>Bid Amount</strong><span>{{ ($application->bid_amount !== null && $application->bid_amount > 0) ? '₹ ' . number_format($application->bid_amount, 2) : 'N/A' }}</span></div>
             <div class="row"><strong>Submitted On</strong><span>{{ $application->submitted_at?->format('d M Y, h:i A') ?? now()->format('d M Y, h:i A') }}</span></div>
         </div>
 

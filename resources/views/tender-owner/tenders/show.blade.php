@@ -72,11 +72,13 @@
                     <label class="text-xs text-gray-500 uppercase">Eligibility Criteria</label>
                     <p class="text-gray-700">{{ $tender->eligibility_criteria }}</p>
                 </div>
+                @if($tender->require_estimated_value && $tender->estimated_value > 0)
                 <div class="bg-gray-50 rounded-lg p-4">
                     <p class="text-xs text-gray-500 uppercase font-semibold mb-1">Estimated Value</p>
-                    <p class="text-lg font-bold text-gray-900">₹{{ number_format($tender->estimated_value ?? 0, 2) }}</p>
+                    <p class="text-lg font-bold text-gray-900">₹{{ number_format($tender->estimated_value, 2) }}</p>
                 </div>
-                @if($tender->emda_amount)
+                @endif
+                @if($tender->require_emd && $tender->emda_amount > 0)
                 <div class="bg-gray-50 rounded-lg p-4">
                     <p class="text-xs text-gray-500 uppercase font-semibold mb-1">EMD Amount</p>
                     <p class="text-lg font-bold text-orange-600">₹{{ number_format($tender->emda_amount, 2) }}</p>

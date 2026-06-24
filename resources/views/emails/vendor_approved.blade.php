@@ -46,7 +46,8 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#f4f6f9;margin:0;padding
         <p style="font-size:13.5px;color:#475569;line-height:1.6">You can now log in and browse available tenders, submit applications, and manage your profile.</p>
 
         <div class="cta">
-            <a href="{{ url('/vendor/tenders') }}">Browse Tenders</a>
+            <a href="{{ url('/login') }}" style="margin-right:12px;background:linear-gradient(135deg,#16a34a,#22c55e);display:inline-block;color:#fff;text-decoration:none;padding:12px 32px;border-radius:8px;font-size:14px;font-weight:600;">Login to Portal</a>
+            <a href="{{ url('/vendor/tenders') }}" style="background:linear-gradient(135deg,#0284c7,#1a56db);display:inline-block;color:#fff;text-decoration:none;padding:12px 32px;border-radius:8px;font-size:14px;font-weight:600;">Browse Tenders</a>
         </div>
 
         <hr class="divider">

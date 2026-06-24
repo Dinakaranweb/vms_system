@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Mail\CommitteeAssignedMail;
 use App\Models\Tender;
+use App\Models\TenderApplication;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,17 +17,52 @@ class TenderOwnerController extends Controller
    public function dashboard()
     {
         $user = auth()->user();
-        $tenders = $user->ownedTenders()->withCount('applications')->latest()->paginate(10);
-        
+        $ownedIds = $user->ownedTenders()->pluck('id');
+
         $stats = [
-            'total' => $user->ownedTenders()->count(),
-            'published' => $user->ownedTenders()->where('status', 'published')->count(),
-            'draft' => $user->ownedTenders()->where('status', 'draft')->count(),
-            'closed' => $user->ownedTenders()->where('status', 'closed')->count(),
-            'total_applications' => $user->ownedTenders()->withCount('applications')->get()->sum('applications_count'),
+            'total'              => $user->ownedTenders()->count(),
+            'published'          => $user->ownedTenders()->where('status', 'published')->count(),
+            'draft'              => $user->ownedTenders()->where('status', 'draft')->count(),
+            'closed'             => $user->ownedTenders()->where('status', 'closed')->count(),
+            'total_applications' => TenderApplication::whereIn('tender_id', $ownedIds)->count(),
         ];
-        
-        return view('tender-owner.dashboard', compact('tenders', 'stats'));
+
+        $appStats = [
+            'submitted'   => TenderApplication::whereIn('tender_id', $ownedIds)->where('status', 'submitted')->count(),
+            'shortlisted' => TenderApplication::whereIn('tender_id', $ownedIds)->where('status', 'shortlisted')->count(),
+            'rejected'    => TenderApplication::whereIn('tender_id', $ownedIds)->where('status', 'rejected')->count(),
+            'awarded'     => TenderApplication::whereIn('tender_id', $ownedIds)->where('status', 'awarded')->count(),
+        ];
+
+        // Top 5 tenders by application count
+        $topTenders = $user->ownedTenders()
+            ->withCount('applications')
+            ->orderByDesc('applications_count')
+            ->take(5)->get();
+
+        // Applications per month (last 6 months)
+        $appMonthly = [];
+        for ($i = 5; $i >= 0; $i--) {
+            $m = now()->subMonths($i);
+            $appMonthly[] = [
+                'label' => $m->format('M y'),
+                'count' => TenderApplication::whereIn('tender_id', $ownedIds)
+                    ->whereYear('created_at', $m->year)
+                    ->whereMonth('created_at', $m->month)
+                    ->count(),
+            ];
+        }
+
+        $onlineCount = $user->ownedTenders()->where('tender_type', 'online')->count();
+        $postalCount = $user->ownedTenders()->where('tender_type', 'postal')->count();
+
+        $tenders = $user->ownedTenders()->withCount('applications')->latest()->paginate(10);
+
+        return view('tender-owner.dashboard', compact(
+            'tenders', 'stats', 'appStats',
+            'topTenders', 'appMonthly',
+            'onlineCount', 'postalCount'
+        ));
     }
     
     public function showCommittee($id)

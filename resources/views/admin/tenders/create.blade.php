@@ -755,6 +755,23 @@
                         </div>
                     </label>
 
+                    {{-- Email Notifications --}}
+                    <label style="display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer;background:var(--surface-alt);transition:border-color .15s;"
+                           id="tile_email"
+                           onmouseover="this.style.borderColor='var(--brand-primary)'"
+                           onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--brand-primary)':'var(--border)'">
+                        <input type="checkbox" name="email_notifications_enabled" value="1"
+                               {{ old('email_notifications_enabled', '1') ? 'checked' : '' }}
+                               style="accent-color:var(--brand-primary);width:16px;height:16px;flex-shrink:0;margin-top:2px;"
+                               onchange="tileBorder(this,'tile_email')">
+                        <div>
+                            <div style="font-size:13.5px;font-weight:600;color:var(--text-primary);display:flex;align-items:center;gap:6px;">
+                                <i class="fas fa-envelope" style="color:#d946ef;font-size:12px;"></i> Send Email Notifications
+                            </div>
+                            <div style="font-size:12px;color:var(--text-muted);margin-top:3px;">If unchecked, no emails are sent for this tender (create, publish, close)</div>
+                        </div>
+                    </label>
+
                 </div>
             </div>
 
@@ -789,15 +806,40 @@
                     <h3>Schedule &amp; Value</h3>
                 </div>
                 <div class="grid-2">
+                    {{-- Estimated Value (optional) --}}
                     <div class="field">
-                        <label>Estimated Value (₹)</label>
-                        <div class="input-prefix">
-                            <span class="prefix-symbol">₹</span>
-                            <input type="number" name="estimated_value" step="0.01"
-                                   value="{{ old('estimated_value') }}" placeholder="0.00">
+                        <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                            <input type="checkbox" name="require_estimated_value" value="1" id="chkEstimated"
+                                   {{ old('require_estimated_value') ? 'checked' : '' }}
+                                   style="accent-color:var(--brand-primary);width:15px;height:15px;"
+                                   onchange="document.getElementById('estimatedBox').style.display=this.checked?'block':'none'">
+                            <span>Show Estimated Value</span>
+                        </label>
+                        <div id="estimatedBox" style="{{ old('require_estimated_value') ? '' : 'display:none;' }}">
+                            <div class="input-prefix">
+                                <span class="prefix-symbol">₹</span>
+                                <input type="number" name="estimated_value" step="0.01"
+                                       value="{{ old('estimated_value') }}" placeholder="0.00">
+                            </div>
                         </div>
                     </div>
-                    <div></div>{{-- spacer --}}
+                    {{-- EMD Amount (optional) --}}
+                    <div class="field">
+                        <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                            <input type="checkbox" name="require_emd" value="1" id="chkEmd"
+                                   {{ old('require_emd') ? 'checked' : '' }}
+                                   style="accent-color:var(--brand-primary);width:15px;height:15px;"
+                                   onchange="document.getElementById('emdBox').style.display=this.checked?'block':'none'">
+                            <span>EMD Amount Required</span>
+                        </label>
+                        <div id="emdBox" style="{{ old('require_emd') ? '' : 'display:none;' }}">
+                            <div class="input-prefix">
+                                <span class="prefix-symbol">₹</span>
+                                <input type="number" name="emda_amount" step="0.01"
+                                       value="{{ old('emda_amount') }}" placeholder="0.00">
+                            </div>
+                        </div>
+                    </div>
                     <div class="field">
                         <label>Submission Deadline <span class="req">*</span></label>
                         <input type="date" name="submission_deadline"
@@ -1220,11 +1262,16 @@ function toggleOptions(select, index) {
     const optEl  = document.getElementById(`options_${index}`);
     const fileEl = document.getElementById(`file_size_${index}`);
     const eligEl = document.getElementById(`eligible_options_${index}`);
+    const eligCheck = document.getElementById(`elig_${index}`);
     const isOptionType = ['select','radio','checkbox'].includes(type);
     if (optEl)  optEl.classList.toggle('visible', isOptionType);
     if (fileEl) fileEl.classList.toggle('visible', type === 'file');
+    if (eligCheck) {
+        eligCheck.disabled = !isOptionType;
+        if (!isOptionType) { eligCheck.checked = false; }
+        eligCheck.closest('.required-toggle').style.opacity = isOptionType ? '1' : '0.4';
+    }
     if (eligEl) {
-        const eligCheck = document.getElementById(`elig_${index}`);
         eligEl.style.display = (isOptionType && eligCheck && eligCheck.checked) ? 'block' : 'none';
     }
 }

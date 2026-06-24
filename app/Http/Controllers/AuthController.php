@@ -9,7 +9,11 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Str;
+use Illuminate\Auth\Events\PasswordReset;
 use App\Mail\VendorRegisteredMail;
+use App\Mail\PasswordResetMail;
 
 class AuthController extends Controller
 {
@@ -109,6 +113,7 @@ class AuthController extends Controller
 
     public function register(Request $request)
     {
+        $hasGst = $request->boolean('has_gst');
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users',
@@ -120,21 +125,46 @@ class AuthController extends Controller
             'state' => 'required|string',
             'pincode' => 'required|string|max:10',
             'pan_number' => 'required|string|unique:vendors',
-            'gst_number' => 'nullable|string|unique:vendors',
-            'registration_certificate' => 'required|file|mimes:pdf,jpg,jpeg,png|max:5120',
+            'gst_number' => $hasGst ? 'required|string|unique:vendors' : 'nullable|string',
+            'gst_document' => $hasGst ? 'required|file|mimes:pdf,jpg,jpeg,png|max:5120' : 'nullable|file',
             'pan_document' => 'required|file|mimes:pdf,jpg,jpeg,png|max:5120',
+            'certificates.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
         ]);
 
+        // Require at least one certificate if no GST
+        if (!$hasGst && !$request->hasFile('certificates')) {
+            return back()->withErrors(['certificates' => 'Please upload at least one supporting certificate (MSME, Udyam Aadhaar, or equivalent).'])->withInput();
+        }
+
         DB::beginTransaction();
-        
+
         try {
             // Handle document uploads
             $documents = [];
-            if ($request->hasFile('registration_certificate')) {
-                $documents['registration_certificate'] = $request->file('registration_certificate')->store('vendor-documents', 'public');
-            }
             if ($request->hasFile('pan_document')) {
                 $documents['pan_document'] = $request->file('pan_document')->store('vendor-documents', 'public');
+            }
+
+            if ($hasGst && $request->hasFile('gst_document')) {
+                $gstFile = $request->file('gst_document');
+                $documents['gst_document'] = [
+                    'path' => $gstFile->store('vendor-documents', 'public'),
+                    'name' => $gstFile->getClientOriginalName(),
+                ];
+            }
+
+            // Handle dynamic certificates (any one acceptable)
+            if ($request->hasFile('certificates')) {
+                $documents['certificates'] = [];
+                foreach ($request->file('certificates') as $certKey => $certFile) {
+                    if ($certFile && $certFile->isValid()) {
+                        $documents['certificates'][$certKey] = [
+                            'path' => $certFile->store('vendor-documents', 'public'),
+                            'name' => $certFile->getClientOriginalName(),
+                            'label' => $request->input("certificate_labels.$certKey", $certKey),
+                        ];
+                    }
+                }
             }
 
             // Create vendor
@@ -147,7 +177,8 @@ class AuthController extends Controller
                 'state' => $validated['state'],
                 'pincode' => $validated['pincode'],
                 'pan_number' => $validated['pan_number'],
-                'gst_number' => $validated['gst_number'] ?? null,
+                'gst_number' => $hasGst ? ($validated['gst_number'] ?? null) : null,
+                'has_gst' => $hasGst,
                 'status' => 'pending',
                 'registration_documents' => $documents,
             ]);
@@ -181,6 +212,54 @@ class AuthController extends Controller
             DB::rollback();
             return back()->withErrors(['error' => 'Registration failed: ' . $e->getMessage()]);
         }
+    }
+
+    public function showForgotForm()
+    {
+        return view('auth.forgot-password');
+    }
+
+    public function sendResetLink(Request $request)
+    {
+        $request->validate(['email' => 'required|email']);
+
+        $status = Password::sendResetLink($request->only('email'));
+
+        if ($status === Password::RESET_LINK_SENT) {
+            return back()->with('success', 'A password reset link has been sent to your email address.');
+        }
+
+        return back()->withErrors(['email' => __($status)]);
+    }
+
+    public function showResetForm(Request $request, string $token)
+    {
+        return view('auth.reset-password', ['token' => $token, 'email' => $request->email]);
+    }
+
+    public function resetPassword(Request $request)
+    {
+        $request->validate([
+            'token'    => 'required',
+            'email'    => 'required|email',
+            'password' => 'required|min:8|confirmed',
+        ]);
+
+        $status = Password::reset(
+            $request->only('email', 'password', 'password_confirmation', 'token'),
+            function (User $user, string $password) {
+                $user->forceFill(['password' => Hash::make($password)])
+                     ->setRememberToken(Str::random(60));
+                $user->save();
+                event(new PasswordReset($user));
+            }
+        );
+
+        if ($status === Password::PASSWORD_RESET) {
+            return redirect()->route('login')->with('success', 'Password reset successfully. You can now log in with your new password.');
+        }
+
+        return back()->withErrors(['email' => __($status)]);
     }
 
     private function redirectBasedOnRole()

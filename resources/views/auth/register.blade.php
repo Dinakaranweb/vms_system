@@ -75,11 +75,48 @@
                         <input type="text" name="pan_number" required class="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white">
                     </div>
                     
-                    <div>
-                        <label class="block text-gray-300 text-sm font-medium mb-2">GST Number</label>
-                        <input type="text" name="gst_number" class="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white">
+                    <div class="md:col-span-2">
+                        <label class="flex items-center gap-3 cursor-pointer mb-3">
+                            <input type="checkbox" name="has_gst" id="hasGstCheck" value="1"
+                                   class="w-4 h-4 accent-blue-400"
+                                   onchange="toggleGst(this.checked)">
+                            <span class="text-gray-300 text-sm font-medium">I have a GST Number</span>
+                        </label>
+                        <div id="gstNumberBox" class="hidden space-y-3">
+                            <div>
+                                <label class="block text-gray-300 text-sm font-medium mb-1">GST Number <span class="text-red-400">*</span></label>
+                                <input type="text" name="gst_number" id="gstNumberInput" placeholder="e.g. 29ABCDE1234F1Z5"
+                                       class="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white">
+                            </div>
+                            <div>
+                                <label class="block text-gray-300 text-sm font-medium mb-1">GST Certificate / Document <span class="text-red-400">*</span></label>
+                                <input type="file" name="gst_document" id="gstDocInput" accept=".pdf,.jpg,.jpeg,.png"
+                                       class="w-full text-white text-sm">
+                                <p class="text-gray-400 text-xs mt-1">Max size: 5MB. Allowed: PDF, JPG, PNG</p>
+                            </div>
+                        </div>
+                        <div id="certificateBox">
+                            <p class="text-yellow-300 text-xs mb-2"><i class="fas fa-info-circle mr-1"></i>No GST? Please upload at least one supporting certificate (MSME, Udyam Aadhaar, etc.)</p>
+                            <div id="certList">
+                                <div class="cert-entry flex gap-2 mb-2">
+                                    <select name="certificate_labels[0]" class="px-3 py-2 bg-gray-800 border border-white/20 rounded-lg text-white text-sm w-52">
+                                        <option value="MSME Certificate">MSME Certificate</option>
+                                        <option value="Udyam Aadhaar">Udyam Aadhaar</option>
+                                        <option value="Trade License">Trade License</option>
+                                        <option value="Registration Certificate">Registration Certificate</option>
+                                        <option value="Other">Other</option>
+                                    </select>
+                                    <input type="file" name="certificates[0]" accept=".pdf,.jpg,.jpeg,.png"
+                                           class="flex-1 text-white text-sm">
+                                </div>
+                            </div>
+                            <button type="button" onclick="addCertRow()"
+                                    class="text-blue-400 hover:text-blue-300 text-xs mt-1">
+                                <i class="fas fa-plus mr-1"></i>Add another certificate
+                            </button>
+                        </div>
                     </div>
-                    
+
                     <div>
                         <label class="block text-gray-300 text-sm font-medium mb-2">City *</label>
                         <input type="text" name="city" required class="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white">
@@ -108,12 +145,6 @@
                     </div>
                     
                     <div>
-                        <label class="block text-gray-300 text-sm font-medium mb-2">Registration Certificate (PDF/Image) *</label>
-                        <input type="file" name="registration_certificate" accept=".pdf,.jpg,.jpeg,.png" required class="w-full text-white">
-                        <p class="text-gray-400 text-xs mt-1">Max size: 5MB. Allowed: PDF, JPG, PNG</p>
-                    </div>
-
-                    <div>
                         <label class="block text-gray-300 text-sm font-medium mb-2">PAN Document (PDF/Image) *</label>
                         <input type="file" name="pan_document" accept=".pdf,.jpg,.jpeg,.png" required class="w-full text-white">
                         <p class="text-gray-400 text-xs mt-1">Max size: 5MB. Allowed: PDF, JPG, PNG</p>
@@ -125,6 +156,33 @@
                 </button>
             </form>
             
+            <script>
+let certCount = 1;
+function toggleGst(hasGst) {
+    document.getElementById('gstNumberBox').classList.toggle('hidden', !hasGst);
+    document.getElementById('certificateBox').classList.toggle('hidden', hasGst);
+    // Toggle required on GST fields
+    document.getElementById('gstNumberInput').required = hasGst;
+    document.getElementById('gstDocInput').required = hasGst;
+}
+function addCertRow() {
+    const list = document.getElementById('certList');
+    const div = document.createElement('div');
+    div.className = 'cert-entry flex gap-2 mb-2';
+    div.innerHTML = `<select name="certificate_labels[${certCount}]" class="px-3 py-2 bg-gray-800 border border-white/20 rounded-lg text-white text-sm w-52">
+        <option value="MSME Certificate">MSME Certificate</option>
+        <option value="Udyam Aadhaar">Udyam Aadhaar</option>
+        <option value="Trade License">Trade License</option>
+        <option value="Registration Certificate">Registration Certificate</option>
+        <option value="Other">Other</option>
+    </select>
+    <input type="file" name="certificates[${certCount}]" accept=".pdf,.jpg,.jpeg,.png" class="flex-1 text-white text-sm">
+    <button type="button" onclick="this.parentElement.remove()" class="text-red-400 hover:text-red-300 text-xs px-2">✕</button>`;
+    list.appendChild(div);
+    certCount++;
+}
+</script>
+
             <div class="mt-6 text-center">
                 <p class="text-gray-300">
                     Already have an account?

@@ -8,7 +8,7 @@ class Vendor extends Model
 {
     protected $fillable = [
         'vendor_code', 'company_name', 'email', 'phone', 'address',
-        'city', 'state', 'pincode', 'pan_number', 'gst_number', 
+        'city', 'state', 'pincode', 'pan_number', 'gst_number', 'has_gst',
         'status', 'rejection_reason', 'approved_by', 'approved_at',
         'registration_documents', 'bank_details'
     ];
@@ -16,7 +16,8 @@ class Vendor extends Model
     protected $casts = [
         'registration_documents' => 'array',
         'bank_details' => 'array',
-        'approved_at' => 'datetime'
+        'approved_at' => 'datetime',
+        'has_gst' => 'boolean',
     ];
 
     protected static function boot()

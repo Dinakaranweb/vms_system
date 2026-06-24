@@ -38,7 +38,12 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#f4f6f9;margin:0;padding
             <div class="row"><strong>Tender Number</strong><span>{{ $tender->tender_number }}</span></div>
             <div class="row"><strong>Title</strong><span>{{ $tender->title }}</span></div>
             <div class="row"><strong>Type</strong><span>{{ ucfirst($tender->tender_type) }}</span></div>
-            <div class="row"><strong>Estimated Value</strong><span>{{ $tender->estimated_value ? '₹' . number_format($tender->estimated_value, 2) : 'Not specified' }}</span></div>
+            @if($tender->require_estimated_value && $tender->estimated_value > 0)
+            <div class="row"><strong>Estimated Value</strong><span>₹{{ number_format($tender->estimated_value, 2) }}</span></div>
+            @endif
+            @if($tender->require_emd && $tender->emda_amount > 0)
+            <div class="row"><strong>EMD Amount</strong><span>₹{{ number_format($tender->emda_amount, 2) }}</span></div>
+            @endif
             <div class="row"><strong>Submission Deadline</strong><span>{{ $tender->submission_deadline?->format('d M Y') }}</span></div>
             <div class="row"><strong>Opening Date</strong><span>{{ $tender->opening_date?->format('d M Y') }}</span></div>
             <div class="row"><strong>Created By</strong><span>{{ $owner->name }} ({{ $owner->email }})</span></div>

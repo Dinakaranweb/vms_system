@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Tender;
+use App\Models\TenderApplication;
 use App\Models\Vendor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -11,15 +13,52 @@ class AdminController extends Controller
     public function dashboard()
     {
         $stats = [
-            'total_vendors' => Vendor::count(),
-            'pending_vendors' => Vendor::where('status', 'pending')->count(),
+            'total_vendors'    => Vendor::count(),
+            'pending_vendors'  => Vendor::where('status', 'pending')->count(),
             'approved_vendors' => Vendor::where('status', 'approved')->count(),
             'rejected_vendors' => Vendor::where('status', 'rejected')->count(),
         ];
-        
+
+        $tenderStats = [
+            'total'     => Tender::count(),
+            'published' => Tender::where('status', 'published')->count(),
+            'draft'     => Tender::where('status', 'draft')->count(),
+            'closed'    => Tender::where('status', 'closed')->count(),
+            'online'    => Tender::where('tender_type', 'online')->count(),
+            'postal'    => Tender::where('tender_type', 'postal')->count(),
+        ];
+
+        $appStats = [
+            'total'       => TenderApplication::count(),
+            'submitted'   => TenderApplication::where('status', 'submitted')->count(),
+            'shortlisted' => TenderApplication::where('status', 'shortlisted')->count(),
+            'rejected'    => TenderApplication::where('status', 'rejected')->count(),
+            'awarded'     => TenderApplication::where('status', 'awarded')->count(),
+        ];
+
+        // Last 6 months data for line charts
+        $vendorMonthly = [];
+        $appMonthly    = [];
+        for ($i = 5; $i >= 0; $i--) {
+            $m = now()->subMonths($i);
+            $vendorMonthly[] = [
+                'label' => $m->format('M y'),
+                'count' => Vendor::whereYear('created_at', $m->year)->whereMonth('created_at', $m->month)->count(),
+            ];
+            $appMonthly[] = [
+                'label' => $m->format('M y'),
+                'count' => TenderApplication::whereYear('created_at', $m->year)->whereMonth('created_at', $m->month)->count(),
+            ];
+        }
+
+        $recentTenders = Tender::withCount('applications')->latest()->take(5)->get();
         $pendingVendors = Vendor::where('status', 'pending')->latest()->paginate(10);
-        
-        return view('admin.dashboard', compact('stats', 'pendingVendors'));
+
+        return view('admin.dashboard', compact(
+            'stats', 'tenderStats', 'appStats',
+            'vendorMonthly', 'appMonthly',
+            'recentTenders', 'pendingVendors'
+        ));
     }
     
     public function vendors()

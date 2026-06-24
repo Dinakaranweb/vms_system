@@ -116,15 +116,29 @@
                 </div>
                 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Estimated Value (₹)</label>
-                    <input type="number" name="estimated_value" step="0.01" value="{{ old('estimated_value', $tender->estimated_value) }}"
-                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <label class="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1 cursor-pointer">
+                        <input type="checkbox" name="require_estimated_value" value="1"
+                               {{ old('require_estimated_value', $tender->require_estimated_value) ? 'checked' : '' }}
+                               class="accent-blue-600" onchange="document.getElementById('estBoxTo').classList.toggle('hidden',!this.checked)">
+                        Show Estimated Value
+                    </label>
+                    <div id="estBoxTo" class="{{ old('require_estimated_value', $tender->require_estimated_value) ? '' : 'hidden' }}">
+                        <input type="number" name="estimated_value" step="0.01" value="{{ old('estimated_value', $tender->estimated_value) }}"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="0.00">
+                    </div>
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">EMD Amount (₹)</label>
-                    <input type="number" name="emda_amount" step="0.01" value="{{ old('emda_amount', $tender->emda_amount) }}"
-                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <label class="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1 cursor-pointer">
+                        <input type="checkbox" name="require_emd" value="1"
+                               {{ old('require_emd', $tender->require_emd) ? 'checked' : '' }}
+                               class="accent-blue-600" onchange="document.getElementById('emdBoxTo').classList.toggle('hidden',!this.checked)">
+                        EMD Amount Required
+                    </label>
+                    <div id="emdBoxTo" class="{{ old('require_emd', $tender->require_emd) ? '' : 'hidden' }}">
+                        <input type="number" name="emda_amount" step="0.01" value="{{ old('emda_amount', $tender->emda_amount) }}"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="0.00">
+                    </div>
                 </div>
 
                 <div>
@@ -378,6 +392,149 @@
                         <i class="fas fa-info-circle text-purple-500 mr-1"></i>
                         Only these vendors will see and apply. They also receive the publish notification email.
                     </p>
+                </div>
+            </div>
+
+            {{-- Application Field Requirements --}}
+            <div class="mt-6 pt-4 border-t">
+                <h4 class="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                    <i class="fas fa-tasks text-blue-600"></i> Application Options
+                </h4>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    @foreach([
+                        ['name'=>'require_bid_amount','label'=>'Bid Amount','icon'=>'fa-rupee-sign','color'=>'#d97706'],
+                        ['name'=>'require_technical_bid','label'=>'Technical Bid','icon'=>'fa-file-alt','color'=>'#7c3aed'],
+                        ['name'=>'require_financial_bid','label'=>'Financial Bid','icon'=>'fa-coins','color'=>'#059669'],
+                        ['name'=>'require_contract_signing','label'=>'Contract Signing','icon'=>'fa-signature','color'=>'#0891b2'],
+                    ] as $opt)
+                    <label class="flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer hover:bg-gray-50 transition">
+                        <input type="checkbox" name="{{ $opt['name'] }}" value="1"
+                               {{ old($opt['name'], $tender->{$opt['name']} ?? true) ? 'checked' : '' }}
+                               class="mt-1 w-4 h-4 accent-blue-600">
+                        <div>
+                            <div class="text-sm font-semibold text-gray-800 flex items-center gap-1">
+                                <i class="fas {{ $opt['icon'] }} text-xs" style="color:{{ $opt['color'] }}"></i> {{ $opt['label'] }}
+                            </div>
+                        </div>
+                    </label>
+                    @endforeach
+                </div>
+            </div>
+
+            {{-- Email Master Toggle --}}
+            <div class="mt-6 pt-4 border-t">
+                <h4 class="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                    <i class="fas fa-envelope text-fuchsia-600"></i> Email Notifications
+                </h4>
+                <label id="editEmailTile" class="flex items-start gap-3 p-4 border-2 rounded-lg cursor-pointer transition
+                                                  {{ old('email_notifications_enabled', $tender->email_notifications_enabled) ? 'border-fuchsia-400 bg-fuchsia-50' : 'border-gray-200' }}">
+                    <input type="checkbox" name="email_notifications_enabled" value="1"
+                           id="editEmailToggle"
+                           {{ old('email_notifications_enabled', $tender->email_notifications_enabled) ? 'checked' : '' }}
+                           class="mt-1 w-4 h-4 accent-fuchsia-600"
+                           onchange="editToggleEmailSection(this.checked)">
+                    <div>
+                        <div class="font-semibold text-gray-800 flex items-center gap-1">
+                            <i class="fas fa-envelope text-fuchsia-600 text-sm"></i> Send Email Notifications
+                        </div>
+                        <p class="text-xs text-gray-500 mt-0.5">If unchecked, no emails are triggered for this tender (publish, close, etc.)</p>
+                    </div>
+                </label>
+            </div>
+
+            {{-- Vendor Notifications --}}
+            <div class="mt-6 pt-4 border-t" id="editNotifySection"
+                 style="{{ old('email_notifications_enabled', $tender->email_notifications_enabled) ? '' : 'display:none;' }}">
+                <h4 class="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                    <i class="fas fa-bell text-cyan-600"></i> Vendor Notifications on Publish
+                </h4>
+
+                {{-- Master notify toggle --}}
+                <label style="display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border:1.5px solid #e2e8f0;border-radius:10px;cursor:pointer;background:#f8fafc;"
+                       id="editNotifyToggleTile">
+                    <input type="checkbox" name="notify_vendors_on_create" value="1" id="editNotifyToggle"
+                           {{ old('notify_vendors_on_create', $tender->notify_vendors_on_create) ? 'checked' : '' }}
+                           style="accent-color:#0891b2;width:16px;height:16px;flex-shrink:0;margin-top:2px;"
+                           onchange="editToggleNotifyOptions(this.checked)">
+                    <div>
+                        <div style="font-size:13.5px;font-weight:600;color:#0f172a;display:flex;align-items:center;gap:6px;">
+                            <i class="fas fa-envelope" style="color:#0891b2;"></i>
+                            Send email notification to vendors when this tender is published
+                        </div>
+                        <div style="font-size:12px;color:#94a3b8;margin-top:3px;">
+                            If unchecked, <strong>no email will be sent</strong> to any vendor automatically on publish.
+                        </div>
+                    </div>
+                </label>
+
+                {{-- Who to notify panel --}}
+                <div id="editNotifyOptions" style="{{ old('notify_vendors_on_create', $tender->notify_vendors_on_create) ? '' : 'display:none;' }}margin-top:18px;padding-left:4px;">
+                    <p style="font-size:12px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin:0 0 10px;">
+                        Who should receive the email?
+                    </p>
+                    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;">
+
+                        @php
+                            $savedMode = old('notify_vendor_mode', (($tender->notify_specific_vendors && count((array)$tender->notify_specific_vendors) > 0) ? 'specific' : 'all'));
+                        @endphp
+
+                        <label style="display:flex;align-items:flex-start;gap:12px;padding:13px 16px;border:1.5px solid #e2e8f0;border-radius:8px;cursor:pointer;background:#f8fafc;" id="editModeAllTile">
+                            <input type="radio" name="notify_vendor_mode" value="all"
+                                   {{ $savedMode === 'all' ? 'checked' : '' }}
+                                   style="accent-color:#0891b2;flex-shrink:0;margin-top:3px;"
+                                   onchange="editToggleSpecificVendors(false)">
+                            <div>
+                                <div style="font-size:13.5px;font-weight:600;color:#0f172a;">
+                                    <i class="fas fa-users" style="color:#16a34a;margin-right:5px;"></i>
+                                    All vendors in the selected categories
+                                </div>
+                                <div style="font-size:12px;color:#94a3b8;margin-top:2px;">
+                                    Every approved vendor in the chosen categories will be notified on publish.
+                                </div>
+                            </div>
+                        </label>
+
+                        <label style="display:flex;align-items:flex-start;gap:12px;padding:13px 16px;border:1.5px solid #e2e8f0;border-radius:8px;cursor:pointer;background:#f8fafc;" id="editModeSpecificTile">
+                            <input type="radio" name="notify_vendor_mode" value="specific"
+                                   {{ $savedMode === 'specific' ? 'checked' : '' }}
+                                   style="accent-color:#0891b2;flex-shrink:0;margin-top:3px;"
+                                   onchange="editToggleSpecificVendors(true)">
+                            <div>
+                                <div style="font-size:13.5px;font-weight:600;color:#0f172a;">
+                                    <i class="fas fa-user-check" style="color:#7c3aed;margin-right:5px;"></i>
+                                    Only selected vendors
+                                </div>
+                                <div style="font-size:12px;color:#94a3b8;margin-top:2px;">
+                                    Manually choose which vendors receive the notification email.
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+
+                    {{-- Specific vendor picker --}}
+                    <div id="editSpecificVendorsBox" style="{{ $savedMode === 'specific' ? '' : 'display:none;' }}">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                            <label style="font-size:12px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.05em;">
+                                Select Vendors
+                            </label>
+                            <button type="button" onclick="editLoadNotifyVendors()"
+                                    style="font-size:12px;padding:6px 14px;background:#1a56db;color:#fff;border:none;border-radius:6px;cursor:pointer;">
+                                <i class="fas fa-sync-alt"></i> Load Vendors from Selected Categories
+                            </button>
+                        </div>
+                        <div id="editNotifyVendorCheckboxList"
+                             style="max-height:220px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;padding:12px;background:#f8fafc;">
+                            <p style="font-size:12px;color:#94a3b8;margin:0;">
+                                <i class="fas fa-arrow-up" style="margin-right:4px;"></i>
+                                Select categories above, then click "Load Vendors".
+                            </p>
+                        </div>
+                        <input type="hidden" name="notify_specific_vendors" id="editNotifySpecificVendorsInput"
+                               value="{{ old('notify_specific_vendors', $tender->notify_specific_vendors ? implode(',', (array)$tender->notify_specific_vendors) : '') }}">
+                        <p style="font-size:12px;color:#94a3b8;margin-top:6px;">
+                            Pre-selected vendors from the saved tender are highlighted above after loading.
+                        </p>
+                    </div>
                 </div>
             </div>
 
@@ -666,6 +823,17 @@ function toggleOptionsFields() {
     const hasOptions = (fieldType === 'select' || fieldType === 'radio' || fieldType === 'checkbox');
     optionsField.style.display = hasOptions ? 'block' : 'none';
     fileSizeField.style.display = fieldType === 'file' ? 'block' : 'none';
+
+    if (determinesEligibility) {
+        // Disable determines_eligibility select when field type is not option-based
+        const opts = determinesEligibility.querySelectorAll ? null : null;
+        if (!hasOptions) {
+            determinesEligibility.value = '0';
+        }
+        determinesEligibility.disabled = !hasOptions;
+        determinesEligibility.closest('div').style.opacity = hasOptions ? '1' : '0.4';
+    }
+
     eligibleOptionsField.style.display = (hasOptions && determinesEligibility && determinesEligibility.value === '1') ? 'block' : 'none';
 }
 
@@ -799,5 +967,73 @@ function updateOwnerEditPrivateIds() {
     const ids = Array.from(document.querySelectorAll('.owner-edit-private-cb:checked')).map(c => c.value);
     document.getElementById('ownerEditPrivateInput').value = ids.join(',');
 }
+
+// ── Email notifications master toggle ──
+function editToggleEmailSection(enabled) {
+    const tile    = document.getElementById('editEmailTile');
+    const section = document.getElementById('editNotifySection');
+    tile.style.borderColor   = enabled ? '#e879f9' : '';
+    tile.style.backgroundColor = enabled ? '#fdf4ff' : '';
+    section.style.display = enabled ? '' : 'none';
+    if (!enabled) {
+        const toggle = document.getElementById('editNotifyToggle');
+        if (toggle) { toggle.checked = false; editToggleNotifyOptions(false); }
+    }
+}
+
+// ── Vendor-notify section toggle ──
+function editToggleNotifyOptions(show) {
+    document.getElementById('editNotifyOptions').style.display = show ? '' : 'none';
+    const tile = document.getElementById('editNotifyToggleTile');
+    if (tile) tile.style.borderColor = show ? '#0891b2' : '#e2e8f0';
+}
+
+// ── Show/hide specific-vendor picker ──
+function editToggleSpecificVendors(show) {
+    document.getElementById('editSpecificVendorsBox').style.display = show ? '' : 'none';
+}
+
+// ── AJAX load vendors for notification picker (same pattern as create view) ──
+function editLoadNotifyVendors() {
+    const catIds    = Array.from(document.querySelectorAll('[name="category_ids[]"]:checked')).map(c => c.value);
+    const container = document.getElementById('editNotifyVendorCheckboxList');
+    const hidden    = document.getElementById('editNotifySpecificVendorsInput');
+    if (!catIds.length) {
+        container.innerHTML = '<p style="font-size:12px;color:#9ca3af;margin:0;">Please select at least one category first.</p>';
+        return;
+    }
+    container.innerHTML = '<p style="font-size:12px;color:#6b7280;margin:0;">Loading...</p>';
+    Promise.all(catIds.map(id => fetch(`/tender-owner/categories/${id}/vendors`).then(r => r.json())))
+        .then(results => {
+            const seen = new Set(), vendors = [];
+            results.flat().forEach(v => { if (!seen.has(v.id)) { seen.add(v.id); vendors.push(v); } });
+            if (!vendors.length) {
+                container.innerHTML = '<p style="font-size:12px;color:#9ca3af;margin:0;">No vendors found in the selected categories.</p>';
+                return;
+            }
+            const current = (hidden.value || '').split(',').map(s => s.trim()).filter(Boolean);
+            container.innerHTML = vendors.map(v => `
+                <label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;">
+                    <input type="checkbox" class="edit-notify-cb" value="${v.id}"
+                           ${current.includes(String(v.id)) ? 'checked' : ''}
+                           onchange="updateEditNotifyIds()"
+                           style="accent-color:#0891b2;width:14px;height:14px;">
+                    <span style="font-size:13px;color:#1e293b;">${v.company_name} <span style="color:#94a3b8;font-size:11px;">(${v.vendor_code})</span></span>
+                </label>`).join('');
+            updateEditNotifyIds();
+        })
+        .catch(() => { container.innerHTML = '<p style="font-size:12px;color:#ef4444;margin:0;">Failed to load vendors.</p>'; });
+}
+
+function updateEditNotifyIds() {
+    const ids = Array.from(document.querySelectorAll('.edit-notify-cb:checked')).map(c => c.value);
+    document.getElementById('editNotifySpecificVendorsInput').value = ids.join(',');
+}
+
+// ── Init on page load ──
+document.addEventListener('DOMContentLoaded', function () {
+    editToggleEmailSection(document.getElementById('editEmailToggle').checked);
+    editToggleNotifyOptions(document.getElementById('editNotifyToggle')?.checked ?? false);
+});
 </script>
 @endsection

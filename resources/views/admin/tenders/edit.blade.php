@@ -124,15 +124,29 @@
                 </div>
                 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Estimated Value (₹)</label>
-                    <input type="number" name="estimated_value" step="0.01" value="{{ old('estimated_value', $tender->estimated_value) }}" 
-                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <label class="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1 cursor-pointer">
+                        <input type="checkbox" name="require_estimated_value" value="1" id="chkEstimatedEdit"
+                               {{ old('require_estimated_value', $tender->require_estimated_value) ? 'checked' : '' }}
+                               class="accent-blue-600" onchange="document.getElementById('estimatedBoxEdit').classList.toggle('hidden',!this.checked)">
+                        Show Estimated Value
+                    </label>
+                    <div id="estimatedBoxEdit" class="{{ old('require_estimated_value', $tender->require_estimated_value) ? '' : 'hidden' }}">
+                        <input type="number" name="estimated_value" step="0.01" value="{{ old('estimated_value', $tender->estimated_value) }}"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="0.00">
+                    </div>
                 </div>
-                
+
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">EMD Amount (₹)</label>
-                    <input type="number" name="emda_amount" step="0.01" value="{{ old('emda_amount', $tender->emda_amount) }}" 
-                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <label class="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1 cursor-pointer">
+                        <input type="checkbox" name="require_emd" value="1" id="chkEmdEdit"
+                               {{ old('require_emd', $tender->require_emd) ? 'checked' : '' }}
+                               class="accent-blue-600" onchange="document.getElementById('emdBoxEdit').classList.toggle('hidden',!this.checked)">
+                        EMD Amount Required
+                    </label>
+                    <div id="emdBoxEdit" class="{{ old('require_emd', $tender->require_emd) ? '' : 'hidden' }}">
+                        <input type="number" name="emda_amount" step="0.01" value="{{ old('emda_amount', $tender->emda_amount) }}"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="0.00">
+                    </div>
                 </div>
                 
                 <div>
@@ -353,6 +367,19 @@
                                 <i class="fas fa-coins text-green-600 text-sm"></i> Financial Bid
                             </div>
                             <p class="text-xs text-gray-500 mt-0.5">Vendor must provide a financial proposal</p>
+                        </div>
+                    </label>
+                    {{-- Email Notifications --}}
+                    <label class="flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer hover:bg-gray-50 transition
+                                  {{ old('email_notifications_enabled', $tender->email_notifications_enabled ?? true) ? 'border-fuchsia-400 bg-fuchsia-50' : 'border-gray-200' }}">
+                        <input type="checkbox" name="email_notifications_enabled" value="1"
+                               {{ old('email_notifications_enabled', $tender->email_notifications_enabled ?? true) ? 'checked' : '' }}
+                               class="mt-1 w-4 h-4 accent-fuchsia-600">
+                        <div>
+                            <div class="font-semibold text-gray-800 flex items-center gap-1">
+                                <i class="fas fa-envelope text-fuchsia-600 text-sm"></i> Send Email Notifications
+                            </div>
+                            <p class="text-xs text-gray-500 mt-0.5">If unchecked, no emails triggered for this tender</p>
                         </div>
                     </label>
                 </div>
@@ -716,12 +743,16 @@ function removeEligibilityQuestion(questionId) {
 function toggleOptionsFields() {
     const fieldType = document.getElementById('fieldType').value;
     const isOptionType = (fieldType === 'select' || fieldType === 'radio' || fieldType === 'checkbox');
-    const determinesElig = document.getElementById('determinesEligibility').checked;
+    const deChk = document.getElementById('determinesEligibility');
 
     document.getElementById('optionsField').style.display = isOptionType ? 'block' : 'none';
     document.getElementById('fileSizeField').style.display = fieldType === 'file' ? 'block' : 'none';
-    // Eligible options: only relevant when the field has selectable options AND determines eligibility
-    document.getElementById('eligibleOptionsField').style.display = (isOptionType && determinesElig) ? 'block' : 'none';
+
+    deChk.disabled = !isOptionType;
+    if (!isOptionType) deChk.checked = false;
+    deChk.closest('label').style.opacity = isOptionType ? '1' : '0.4';
+
+    document.getElementById('eligibleOptionsField').style.display = (isOptionType && deChk.checked) ? 'block' : 'none';
 }
 
 function saveEligibilityQuestion() {

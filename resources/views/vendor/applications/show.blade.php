@@ -44,10 +44,14 @@
                     <p class="font-semibold text-gray-900">{{ $application->tender->title ?? 'N/A' }}</p>
                     <p class="text-xs text-gray-500">Tender #: {{ $application->tender->tender_number ?? 'N/A' }}</p>
                 </div>
+                @if(!($application->tender && $application->tender->isPostal()))
                 <div class="bg-gray-50 rounded-lg p-3">
                     <label class="text-xs text-gray-500 uppercase">Bid Amount</label>
-                    <p class="text-2xl font-bold text-green-600">₹{{ number_format($application->bid_amount, 2) }}</p>
+                    <p class="text-2xl font-bold text-green-600">
+                        @if($application->bid_amount !== null && $application->bid_amount > 0)₹{{ number_format($application->bid_amount, 2) }}@else<span class="text-gray-400 text-sm font-normal">N/A</span>@endif
+                    </p>
                 </div>
+                @endif
                 @if($application->rejection_reason)
                 <div class="col-span-2 bg-red-50 rounded-lg p-3">
                     <label class="text-xs text-red-600 uppercase">Rejection Reason</label>

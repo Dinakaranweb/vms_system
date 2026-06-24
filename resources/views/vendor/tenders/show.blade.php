@@ -52,14 +52,18 @@
                         @endif
                     </p>
                 </div>
+                @if($tender->require_estimated_value && $tender->estimated_value > 0)
                 <div>
                     <label class="text-sm text-gray-500">Estimated Value</label>
-                    <p class="font-medium text-gray-900">₹{{ number_format($tender->estimated_value ?? 0, 2) }}</p>
+                    <p class="font-medium text-gray-900">₹{{ number_format($tender->estimated_value, 2) }}</p>
                 </div>
+                @endif
+                @if($tender->require_emd && $tender->emda_amount > 0)
                 <div>
                     <label class="text-sm text-gray-500">EMD Amount</label>
-                    <p class="font-medium text-gray-900">₹{{ number_format($tender->emda_amount ?? 0, 2) }}</p>
+                    <p class="font-medium text-gray-900">₹{{ number_format($tender->emda_amount, 2) }}</p>
                 </div>
+                @endif
                 <div>
                     <label class="text-sm text-gray-500">Submission Deadline</label>
                     <p class="font-medium text-gray-900">

@@ -28,14 +28,18 @@
             <label class="text-xs text-gray-500 uppercase">Eligibility Criteria</label>
             <p class="text-gray-700">{{ $tender->eligibility_criteria }}</p>
         </div>
+        @if($tender->require_estimated_value && $tender->estimated_value > 0)
         <div>
             <label class="text-xs text-gray-500 uppercase">Estimated Value</label>
-            <p class="text-gray-900">₹{{ number_format($tender->estimated_value ?? 0, 2) }}</p>
+            <p class="text-gray-900">₹{{ number_format($tender->estimated_value, 2) }}</p>
         </div>
+        @endif
+        @if($tender->require_emd && $tender->emda_amount > 0)
         <div>
             <label class="text-xs text-gray-500 uppercase">EMD Amount</label>
-            <p class="text-gray-900">₹{{ number_format($tender->emda_amount ?? 0, 2) }}</p>
+            <p class="text-gray-900">₹{{ number_format($tender->emda_amount, 2) }}</p>
         </div>
+        @endif
         <div>
             <label class="text-xs text-gray-500 uppercase">Submission Deadline</label>
             <p class="text-gray-900">{{ $tender->submission_deadline ? date('d M, Y', strtotime($tender->submission_deadline)) : 'N/A' }}</p>

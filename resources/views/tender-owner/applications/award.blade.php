@@ -284,7 +284,7 @@
                             </label>
                             <input type="number" name="contract_value" class="aw-input"
                                    step="0.01" min="0"
-                                   value="{{ old('contract_value', $application->bid_amount > 0 ? $application->bid_amount : '') }}"
+                                   value="{{ old('contract_value', ($application->bid_amount !== null && $application->bid_amount > 0) ? $application->bid_amount : '') }}"
                                    placeholder="0.00">
                         </div>
                         <div class="aw-field">
@@ -641,8 +641,8 @@ document.getElementById('awardForm').addEventListener('submit', function (e) {
     if (!endDate?.value)      errors.push('End Date is required.');
     if (endDate?.value && startDate?.value && endDate.value <= startDate.value)
                               errors.push('End Date must be after Start Date.');
-    if (!contractValue?.value || parseFloat(contractValue.value) < 0)
-                              errors.push('Contract Value is required.');
+    if (contractValue?.value !== '' && contractValue?.value !== undefined && parseFloat(contractValue.value) < 0)
+                              errors.push('Contract Value must be 0 or greater.');
     if (!orderType)           errors.push('Order Type is required (Work Order or Purchase Order).');
     if (!orderDate?.value)    errors.push('Order Date is required.');
 

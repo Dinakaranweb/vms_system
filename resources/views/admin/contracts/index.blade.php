@@ -82,10 +82,10 @@
                         <td class="px-6 py-4 text-sm text-gray-900">{{ Str::limit($contract->tender->title ?? 'N/A', 30) }}</td>
                         <td class="px-6 py-4 text-sm text-gray-600">{{ $contract->vendor->company_name ?? 'N/A' }}</td>
                         <td class="px-6 py-4 text-sm font-semibold text-green-600">₹{{ number_format($contract->contract_value, 2) }}</td>
-                        <td class="px-6 py-4 text-sm text-gray-600">{{ $contract->start_date->format('d M, Y') }}</td>
+                        <td class="px-6 py-4 text-sm text-gray-600">{{ $contract->start_date?->format('d M, Y') ?? '—' }}</td>
                         <td class="px-6 py-4 text-sm text-gray-600">
-                            {{ $contract->end_date->format('d M, Y') }}
-                            @if($contract->status == 'active')
+                            {{ $contract->end_date?->format('d M, Y') ?? '—' }}
+                            @if($contract->status == 'active' && $contract->end_date)
                                 <span class="text-xs text-{{ $contract->end_date->diffInDays(now()) <= 30 ? 'red' : 'green' }}-600">
                                     ({{ $contract->end_date->diffInDays(now()) }} days left)
                                 </span>
@@ -108,9 +108,9 @@
                                     <i class="fas fa-eye"></i>
                                 </button>
                                 @php
-                                    $rp       = auth()->user()->hasRole('super-admin') ? 'super-admin' : 'admin';
                                     $hasItems = !empty($contract->order_items);
                                     $orderDoc = collect($contract->supporting_documents ?? [])->firstWhere('type', 'order_document');
+                                    $hasWoRoute = $rp !== 'tender-owner' || Route::has('tender-owner.contracts.work-order');
                                 @endphp
                                 @if($hasItems)
                                     <a href="{{ route("{$rp}.contracts.order-pdf", $contract->id) }}"
@@ -205,6 +205,7 @@
 
 <script>
 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}';
+const rolePrefix = '{{ $rp }}';
 let currentContractId = null;
 
 function viewContract(id) {
@@ -212,8 +213,8 @@ function viewContract(id) {
     const detailsDiv = document.getElementById('contractDetails');
     modal.style.display = 'flex';
     detailsDiv.innerHTML = '<div class="text-center py-8"><i class="fas fa-spinner fa-spin text-3xl"></i><p>Loading...</p></div>';
-    
-    fetch(`/admin/contracts/${id}`, {
+
+    fetch(`/${rolePrefix}/contracts/${id}`, {
         headers: { 'X-Requested-With': 'XMLHttpRequest' }
     })
     .then(response => response.text())
@@ -226,7 +227,7 @@ function closeContractModal() {
 
 function signContract(id) {
     if (confirm('Sign this contract?')) {
-        fetch(`/admin/contracts/${id}/sign`, {
+        fetch(`/${rolePrefix}/contracts/${id}/sign`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken }
         }).then(() => location.reload());
@@ -255,7 +256,7 @@ function confirmExtend() {
         return;
     }
     
-    fetch(`/admin/contracts/${currentContractId}/extend`, {
+    fetch(`/${rolePrefix}/contracts/${currentContractId}/extend`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken },
         body: JSON.stringify(data)
@@ -273,7 +274,7 @@ function confirmExtend() {
 function showTerminateModal(id) {
     const reason = prompt('Reason for termination:');
     if (reason) {
-        fetch(`/admin/contracts/${id}/terminate`, {
+        fetch(`/${rolePrefix}/contracts/${id}/terminate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken },
             body: JSON.stringify({ reason: reason })
@@ -282,7 +283,6 @@ function showTerminateModal(id) {
 }
 
 function uploadSupportingDocs(contractId) {
-    const rolePrefix = window.location.pathname.startsWith('/super-admin/') ? 'super-admin' : 'admin';
     const form = document.getElementById('sdUploadForm');
     const formData = new FormData(form);
     const msg = document.getElementById('sdUploadMsg');
@@ -316,7 +316,6 @@ function uploadSupportingDocs(contractId) {
 
 function deleteSupportingDoc(contractId, index) {
     if (!confirm('Delete this document?')) return;
-    const rolePrefix = window.location.pathname.startsWith('/super-admin/') ? 'super-admin' : 'admin';
     fetch(`/${rolePrefix}/contracts/${contractId}/supporting-docs`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken },

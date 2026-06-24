@@ -54,10 +54,16 @@
                 <span>{{ $tender->tender_number }}</span>
             </div>
 
-            @if($tender->estimated_value)
+            @if($tender->require_estimated_value && $tender->estimated_value > 0)
             <div class="meta-row">
                 <strong>Estimated Value</strong>
                 <span>₹ {{ number_format($tender->estimated_value, 2) }}</span>
+            </div>
+            @endif
+            @if($tender->require_emd && $tender->emda_amount > 0)
+            <div class="meta-row">
+                <strong>EMD Amount</strong>
+                <span>₹ {{ number_format($tender->emda_amount, 2) }}</span>
             </div>
             @endif
 

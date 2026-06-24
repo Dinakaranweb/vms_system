@@ -346,6 +346,52 @@
 
     </div>
 
+    {{-- ── Charts ── --}}
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:1.25rem;margin-bottom:1.5rem;" class="vd-chart-row">
+
+        {{-- Application Trend --}}
+        <div class="vd-panel">
+            <div class="vd-panel-head">
+                <span class="vd-panel-title"><i class="fas fa-chart-line mr-2 text-indigo-500"></i>Applications Over Time</span>
+                <span class="vd-panel-count">Last 6 Months</span>
+            </div>
+            <div style="padding:1.25rem 1.75rem;">
+                <canvas id="appTrendChart" height="120"></canvas>
+            </div>
+        </div>
+
+        {{-- Application Status Donut --}}
+        <div class="vd-panel">
+            <div class="vd-panel-head">
+                <span class="vd-panel-title"><i class="fas fa-chart-pie mr-2 text-purple-500"></i>Application Status</span>
+            </div>
+            <div style="padding:1.25rem 1.75rem;display:flex;flex-direction:column;align-items:center;gap:1rem;">
+                <canvas id="appStatusChart" width="160" height="160" style="max-width:160px;"></canvas>
+                <div style="width:100%;font-size:12px;">
+                    @php
+                        $statusData = [
+                            ['label'=>'Submitted',  'val'=>$stats['submitted_applications'],  'color'=>'#d97706'],
+                            ['label'=>'Shortlisted','val'=>$stats['shortlisted_applications'], 'color'=>'#3b82f6'],
+                            ['label'=>'Awarded',    'val'=>$stats['awarded_applications'],     'color'=>'#7c3aed'],
+                        ];
+                        $totalApps = $stats['total_applications'] ?: 1;
+                    @endphp
+                    @foreach($statusData as $sd)
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.4rem;">
+                        <span style="display:flex;align-items:center;gap:.4rem;color:#374151;">
+                            <span style="width:10px;height:10px;border-radius:50%;background:{{ $sd['color'] }};display:inline-block;"></span>
+                            {{ $sd['label'] }}
+                        </span>
+                        <span style="font-weight:600;color:#111;">{{ $sd['val'] }}</span>
+                    </div>
+                    @endforeach
+                </div>
+            </div>
+        </div>
+
+    </div>
+    <style>@media(max-width:900px){.vd-chart-row{grid-template-columns:1fr!important;}}</style>
+
     {{-- ── Panels ── --}}
     <div class="vd-panels">
 
@@ -363,7 +409,13 @@
             <div class="vd-row">
                 <div>
                     <p class="vd-row-title">{{ $application->tender->title ?? 'N/A' }}</p>
-                    <p class="vd-row-sub">Bid: ₹{{ number_format($application->bid_amount, 2) }}</p>
+                    <p class="vd-row-sub">
+                    @if($application->bid_amount !== null && $application->bid_amount > 0)
+                        Bid: ₹{{ number_format($application->bid_amount, 2) }}
+                    @else
+                        Bid: N/A
+                    @endif
+                </p>
                 </div>
                 @if($application->status == 'submitted')
                     <span class="vd-badge submitted">Submitted</span>
@@ -423,7 +475,70 @@
 
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
+// ── Application trend line chart ──────────────────────────
+@php
+    $trendLabels = collect($appMonthly)->pluck('label');
+    $trendCounts = collect($appMonthly)->pluck('count');
+@endphp
+(function () {
+    const ctx = document.getElementById('appTrendChart');
+    if (!ctx) return;
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: {!! $trendLabels->toJson() !!},
+            datasets: [{
+                label: 'Applications',
+                data: {!! $trendCounts->toJson() !!},
+                borderColor: '#6366f1',
+                backgroundColor: 'rgba(99,102,241,.1)',
+                fill: true,
+                tension: 0.4,
+                pointBackgroundColor: '#6366f1',
+                pointRadius: 4,
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 11 } }, grid: { color: '#f3f4f6' } },
+                x: { ticks: { font: { size: 11 } }, grid: { display: false } }
+            }
+        }
+    });
+})();
+
+// ── Application status donut ──────────────────────────────
+(function () {
+    const ctx = document.getElementById('appStatusChart');
+    if (!ctx) return;
+    const vals = [{{ $stats['submitted_applications'] }}, {{ $stats['shortlisted_applications'] }}, {{ $stats['awarded_applications'] }}];
+    const total = vals.reduce((a, b) => a + b, 0);
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Submitted', 'Shortlisted', 'Awarded'],
+            datasets: [{
+                data: total > 0 ? vals : [1],
+                backgroundColor: total > 0 ? ['#fbbf24', '#3b82f6', '#7c3aed'] : ['#e5e7eb'],
+                borderWidth: 2,
+                borderColor: '#fff',
+            }]
+        },
+        options: {
+            cutout: '70%',
+            plugins: {
+                legend: { display: false },
+                tooltip: { enabled: total > 0 }
+            }
+        }
+    });
+})();
+
+// ── Live stats refresh ────────────────────────────────────
 function refreshStats() {
     fetch('/vendor/stats', {
         headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '' }
@@ -442,7 +557,6 @@ function refreshStats() {
     .catch(() => {});
 }
 
-// Refresh every 60 seconds
 setInterval(refreshStats, 60000);
 </script>
 @endsection

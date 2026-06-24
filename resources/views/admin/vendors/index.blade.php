@@ -351,30 +351,42 @@ window.viewVendor = function(id) {
 
         /* ── documents ── */
         const docs = v.registration_documents || {};
-        const docEntries = Object.entries(docs);
-        const docsHtml = docEntries.length
-            ? docEntries.map(([type, path]) => {
-                const label  = type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-                const ext    = path.split('.').pop().toUpperCase();
-                const url    = '/storage/' + path;
-                const isImg  = ['JPG','JPEG','PNG','GIF','WEBP'].includes(ext);
-                const isPdf  = ext === 'PDF';
-                const iconCls = isPdf ? 'fa-file-pdf text-red-500' : (isImg ? 'fa-file-image text-blue-500' : 'fa-file-alt text-gray-500');
-                return `<div class="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-200">
-                            <i class="fas ${iconCls} text-base flex-shrink-0"></i>
-                            <span class="flex-1 text-sm font-medium text-gray-800">${escapeHtml(label)}</span>
-                            <span class="text-xs font-mono text-gray-400 mr-1">${ext}</span>
-                            <button type="button"
-                                    onclick="openDocViewer('${url}', '${escapeHtml(label)}.${ext.toLowerCase()}', '${isPdf ? 'pdf' : (isImg ? 'img' : 'other')}')"
-                                    class="text-xs px-2.5 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center gap-1 flex-shrink-0">
-                                <i class="fas fa-eye"></i> View
-                            </button>
-                            <a href="${url}" download
-                               class="text-xs px-2.5 py-1 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 flex items-center gap-1 flex-shrink-0">
-                                <i class="fas fa-download"></i>
-                            </a>
-                        </div>`;
-            }).join('')
+        function renderDocEntry(label, filePath, fileName) {
+            const ext  = (filePath || '').split('.').pop().toUpperCase();
+            const url  = '/storage/' + filePath;
+            const isImg = ['JPG','JPEG','PNG','GIF','WEBP'].includes(ext);
+            const isPdf = ext === 'PDF';
+            const iconCls = isPdf ? 'fa-file-pdf text-red-500' : (isImg ? 'fa-file-image text-blue-500' : 'fa-file-alt text-gray-500');
+            const displayName = fileName ? escapeHtml(label + ' — ' + fileName) : escapeHtml(label);
+            return `<div class="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-200">
+                        <i class="fas ${iconCls} text-base flex-shrink-0"></i>
+                        <span class="flex-1 text-sm font-medium text-gray-800">${displayName}</span>
+                        <button type="button"
+                                onclick="openDocViewer('${url}', '${escapeHtml(label)}.${ext.toLowerCase()}', '${isPdf ? 'pdf' : (isImg ? 'img' : 'other')}')"
+                                class="text-xs px-2.5 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center gap-1 flex-shrink-0">
+                            <i class="fas fa-eye"></i> View
+                        </button>
+                        <a href="${url}" download
+                           class="text-xs px-2.5 py-1 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 flex items-center gap-1 flex-shrink-0">
+                            <i class="fas fa-download"></i>
+                        </a>
+                    </div>`;
+        }
+        const docRows = [];
+        Object.entries(docs).forEach(([type, value]) => {
+            const label = type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            if (type === 'certificates' && Array.isArray(value)) {
+                value.forEach(cert => {
+                    if (cert && cert.path) docRows.push(renderDocEntry(cert.label || 'Certificate', cert.path, cert.name));
+                });
+            } else if (value && typeof value === 'object' && value.path) {
+                docRows.push(renderDocEntry(label, value.path, value.name));
+            } else if (typeof value === 'string') {
+                docRows.push(renderDocEntry(label, value, null));
+            }
+        });
+        const docsHtml = docRows.length
+            ? docRows.join('')
             : '<p class="text-sm text-gray-400 py-1">No documents uploaded yet.</p>';
 
         /* ── bank details ── */

@@ -5,12 +5,19 @@
 
 @section('content')
 @php
-    $rp         = request()->is('super-admin/*') ? 'super-admin' : 'admin';
+    $rp         = $rp ?? (request()->is('super-admin/*') ? 'super-admin' : 'admin');
     $hasItems   = !empty($contract->order_items);
     $orderDoc   = collect($contract->supporting_documents ?? [])->firstWhere('type', 'order_document');
     $orderLabel = $contract->order_type === 'purchase_order' ? 'Purchase Order' : 'Work Order';
     $showValue  = $contract->contract_value > 0;
-    // All contracts (including partial orders) for same application
+    $contractsListRoute = $rp === 'tender-owner'
+        ? route('tender-owner.contracts.index')
+        : route("{$rp}.contracts");
+    $awardFormRoute = $contract->application_id
+        ? ($rp === 'tender-owner'
+            ? route('tender-owner.applications.award-form', $contract->application_id)
+            : route("{$rp}.applications.award-form", $contract->application_id))
+        : null;
     $siblingContracts = $contract->application_id
         ? \App\Models\Contract::where('application_id', $contract->application_id)
               ->where('id', '!=', $contract->id)
@@ -60,13 +67,13 @@
                             </a>
                         @endif
                     @endif
-                    @if($contract->application_id)
-                    <a href="{{ route("{$rp}.applications.award-form", $contract->application_id) }}?partial_order=1"
+                    @if($awardFormRoute)
+                    <a href="{{ $awardFormRoute }}?partial_order=1"
                        class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/80 hover:bg-amber-500 text-white text-sm rounded-lg transition">
-                        <i class="fas fa-layer-group text-xs"></i> Add Partial Order
+                        <i class="fas fa-layer-group text-xs"></i> Add Partial WO/PO
                     </a>
                     @endif
-                    <a href="{{ route("{$rp}.contracts") }}"
+                    <a href="{{ $contractsListRoute }}"
                        class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-sm rounded-lg transition">
                         <i class="fas fa-arrow-left text-xs"></i> Back
                     </a>
@@ -113,8 +120,8 @@
                 @endif
                 <div>
                     <label class="text-xs text-gray-500 uppercase">Duration</label>
-                    <p class="text-gray-900 mt-0.5">{{ $contract->start_date->format('d M, Y') }} – {{ $contract->end_date->format('d M, Y') }}</p>
-                    <p class="text-sm text-gray-500">{{ $contract->start_date->diffInDays($contract->end_date) }} days</p>
+                    <p class="text-gray-900 mt-0.5">{{ $contract->start_date?->format('d M, Y') ?? '—' }} – {{ $contract->end_date?->format('d M, Y') ?? '—' }}</p>
+                    <p class="text-sm text-gray-500">{{ ($contract->start_date && $contract->end_date) ? $contract->start_date->diffInDays($contract->end_date) . ' days' : '' }}</p>
                 </div>
             </div>
 
@@ -217,7 +224,7 @@
                         @if($contract->signed_by_admin)
                             <div class="flex items-center mt-1">
                                 <i class="fas fa-check-circle text-green-600 mr-2"></i>
-                                <span class="text-sm">Signed on {{ $contract->admin_signed_at->format('d M, Y H:i') }}</span>
+                                <span class="text-sm">Signed on {{ $contract->admin_signed_at?->format('d M, Y H:i') }}</span>
                             </div>
                         @else
                             <div class="flex items-center mt-1">
@@ -231,7 +238,7 @@
                         @if($contract->signed_by_vendor)
                             <div class="flex items-center mt-1">
                                 <i class="fas fa-check-circle text-green-600 mr-2"></i>
-                                <span class="text-sm">Signed on {{ $contract->vendor_signed_at->format('d M, Y H:i') }}</span>
+                                <span class="text-sm">Signed on {{ $contract->vendor_signed_at?->format('d M, Y H:i') }}</span>
                             </div>
                         @else
                             <div class="flex items-center mt-1">
@@ -367,6 +374,8 @@
 <script>
 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}';
 
+const rolePrefix = '{{ $rp }}';
+
 function uploadSupportingDocs(contractId) {
     const form = document.getElementById('sdUploadForm');
     const msgEl = document.getElementById('sdUploadMsg');
@@ -374,7 +383,7 @@ function uploadSupportingDocs(contractId) {
     msgEl.className = 'mt-2 text-sm text-blue-600';
     msgEl.textContent = 'Uploading...';
     msgEl.classList.remove('hidden');
-    fetch(`/{{ $rp === 'super-admin' ? 'super-admin' : 'admin' }}/contracts/${contractId}/supporting-docs`, {
+    fetch(`/${rolePrefix}/contracts/${contractId}/supporting-docs`, {
         method: 'POST',
         body: data,
         headers: { 'X-CSRF-TOKEN': csrfToken }
@@ -386,7 +395,7 @@ function uploadSupportingDocs(contractId) {
 
 function deleteSupportingDoc(contractId, idx) {
     if (!confirm('Delete this document?')) return;
-    fetch(`/{{ $rp === 'super-admin' ? 'super-admin' : 'admin' }}/contracts/${contractId}/supporting-docs`, {
+    fetch(`/${rolePrefix}/contracts/${contractId}/supporting-docs`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken },
         body: JSON.stringify({ doc_index: idx })

@@ -92,13 +92,36 @@
     <div class="bg-gray-50 rounded-lg p-4">
         <h3 class="text-lg font-semibold text-gray-800 mb-4">Uploaded Documents</h3>
         <div class="space-y-2">
-            @foreach($vendor->registration_documents as $type => $path)
-            <div class="flex justify-between items-center">
-                <span class="text-gray-700">{{ str_replace('_', ' ', ucfirst($type)) }}</span>
-                <a href="{{ Storage::url($path) }}" target="_blank" class="text-blue-600 hover:text-blue-800">
-                    <i class="fas fa-download mr-1"></i> Download
-                </a>
-            </div>
+            @foreach($vendor->registration_documents as $type => $value)
+                @if($type === 'certificates' && is_array($value))
+                    @foreach($value as $cert)
+                        @if(is_array($cert) && isset($cert['path']))
+                        <div class="flex justify-between items-center bg-white rounded p-2 border">
+                            <span class="text-gray-700 text-sm">{{ $cert['label'] ?? 'Certificate' }} — {{ $cert['name'] ?? '' }}</span>
+                            <div class="flex gap-2">
+                                <a href="{{ Storage::url($cert['path']) }}" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm"><i class="fas fa-eye mr-1"></i>View</a>
+                                <a href="{{ Storage::url($cert['path']) }}" download class="text-green-600 hover:text-green-800 text-sm"><i class="fas fa-download mr-1"></i>Download</a>
+                            </div>
+                        </div>
+                        @endif
+                    @endforeach
+                @elseif(is_array($value) && isset($value['path']))
+                    <div class="flex justify-between items-center bg-white rounded p-2 border">
+                        <span class="text-gray-700 text-sm">{{ str_replace('_', ' ', ucwords($type)) }} — {{ $value['name'] ?? '' }}</span>
+                        <div class="flex gap-2">
+                            <a href="{{ Storage::url($value['path']) }}" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm"><i class="fas fa-eye mr-1"></i>View</a>
+                            <a href="{{ Storage::url($value['path']) }}" download class="text-green-600 hover:text-green-800 text-sm"><i class="fas fa-download mr-1"></i>Download</a>
+                        </div>
+                    </div>
+                @elseif(is_string($value))
+                    <div class="flex justify-between items-center bg-white rounded p-2 border">
+                        <span class="text-gray-700 text-sm">{{ str_replace('_', ' ', ucwords($type)) }}</span>
+                        <div class="flex gap-2">
+                            <a href="{{ Storage::url($value) }}" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm"><i class="fas fa-eye mr-1"></i>View</a>
+                            <a href="{{ Storage::url($value) }}" download class="text-green-600 hover:text-green-800 text-sm"><i class="fas fa-download mr-1"></i>Download</a>
+                        </div>
+                    </div>
+                @endif
             @endforeach
         </div>
     </div>

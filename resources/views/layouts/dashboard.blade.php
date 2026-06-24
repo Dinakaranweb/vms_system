@@ -484,10 +484,15 @@
             @if(Auth::user()->hasRole('vendor'))
                 <div class="nav-section-label">Tenders</div>
 
-                <a href="{{ route('vendor.tenders') }}"
-                   class="nav-link {{ request()->routeIs('vendor.tenders*') ? 'active' : '' }}">
-                    <i class="fas fa-gavel"></i>
-                    <span>Open Tenders</span>
+                <a href="{{ route('vendor.tenders') }}?type=online"
+                   class="nav-link {{ request()->routeIs('vendor.tenders') && request('type','online') === 'online' ? 'active' : '' }}">
+                    <i class="fas fa-globe"></i>
+                    <span>Online Tenders</span>
+                </a>
+                <a href="{{ route('vendor.tenders') }}?type=postal"
+                   class="nav-link {{ request()->routeIs('vendor.tenders') && request('type') === 'postal' ? 'active' : '' }}">
+                    <i class="fas fa-envelope"></i>
+                    <span>Postal Tenders</span>
                 </a>
                 <a href="{{ route('vendor.applications') }}"
                    class="nav-link {{ request()->routeIs('vendor.applications*') ? 'active' : '' }}">
@@ -542,6 +547,12 @@
                    class="nav-link {{ request()->routeIs('tender-owner.contracts*') ? 'active' : '' }}">
                     <i class="fas fa-file-contract"></i>
                     <span>Contracts</span>
+                </a>
+
+                <a href="{{ route('tender-owner.eligibility-failures') }}"
+                   class="nav-link {{ request()->routeIs('tender-owner.eligibility-failures*') ? 'active' : '' }}">
+                    <i class="fas fa-ban"></i>
+                    <span>Eligibility Failures</span>
                 </a>
 
                 <a href="{{ route('tender-owner.reports') }}"

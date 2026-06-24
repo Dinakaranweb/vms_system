@@ -43,6 +43,7 @@ function addQuestion(data = null) {
     questionDiv.className = 'question-item bg-gray-50 rounded-lg p-4 mb-4';
     questionDiv.setAttribute('data-id', questionCount);
     
+    const isChoiceType = ['select','radio','checkbox'].includes(data?.field_type);
     questionDiv.innerHTML = `
         <div class="flex justify-between items-center mb-3">
             <h4 class="font-semibold text-gray-800">Question ${questionCount + 1}</h4>
@@ -73,15 +74,26 @@ function addQuestion(data = null) {
                         <option value="file" ${data?.field_type === 'file' ? 'selected' : ''}>File Upload</option>
                     </select>
                 </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">
+                <div class="flex flex-col gap-2 justify-center">
+                    <label class="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
                         <input type="checkbox" name="questions[${questionCount}][is_required]" value="1" ${data?.is_required !== false ? 'checked' : ''}> Required
+                    </label>
+                    <label id="deLabel_${questionCount}" class="flex items-center gap-2 text-sm font-medium cursor-pointer ${isChoiceType ? 'text-purple-700' : 'text-gray-400'}" title="Only available for Dropdown, Radio, and Checkbox types">
+                        <input type="checkbox" id="de_${questionCount}" name="questions[${questionCount}][determines_eligibility]" value="1"
+                               ${data?.determines_eligibility ? 'checked' : ''}
+                               ${isChoiceType ? '' : 'disabled'}
+                               onchange="toggleEligibleOptions(${questionCount})">
+                        Determines Eligibility
                     </label>
                 </div>
             </div>
-            <div id="options_${questionCount}" style="display: ${data?.field_type === 'select' || data?.field_type === 'radio' || data?.field_type === 'checkbox' ? 'block' : 'none'}">
+            <div id="options_${questionCount}" style="display: ${isChoiceType ? 'block' : 'none'}">
                 <label class="block text-sm font-medium text-gray-700 mb-1">Options (comma separated)</label>
-                <input type="text" name="questions[${questionCount}][options]" value="${data?.options || ''}" placeholder="Option 1, Option 2, Option 3" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                <input type="text" name="questions[${questionCount}][options]" value="${data?.options || ''}" placeholder="Yes, No, Applicable" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            </div>
+            <div id="eligibleOpts_${questionCount}" style="display: ${isChoiceType && data?.determines_eligibility ? 'block' : 'none'}">
+                <label class="block text-sm font-medium text-purple-700 mb-1"><i class="fas fa-check-circle mr-1"></i>Eligible Options (comma separated — vendor must select one of these)</label>
+                <input type="text" name="questions[${questionCount}][eligible_options]" value="${data?.eligible_options || ''}" placeholder="Yes, Applicable" class="w-full px-3 py-2 border border-purple-300 rounded-lg">
             </div>
             <div id="file_size_${questionCount}" style="display: ${data?.field_type === 'file' ? 'block' : 'none'}">
                 <label class="block text-sm font-medium text-gray-700 mb-1">Max File Size (KB)</label>
@@ -98,13 +110,27 @@ function toggleOptions(index) {
     const fieldType = document.querySelector(`select[name="questions[${index}][field_type]"]`).value;
     const optionsDiv = document.getElementById(`options_${index}`);
     const fileSizeDiv = document.getElementById(`file_size_${index}`);
-    
-    if (optionsDiv) {
-        optionsDiv.style.display = (fieldType === 'select' || fieldType === 'radio' || fieldType === 'checkbox') ? 'block' : 'none';
+    const deCheckbox = document.getElementById(`de_${index}`);
+    const deLabel = document.getElementById(`deLabel_${index}`);
+    const isChoice = ['select','radio','checkbox'].includes(fieldType);
+
+    if (optionsDiv) optionsDiv.style.display = isChoice ? 'block' : 'none';
+    if (fileSizeDiv) fileSizeDiv.style.display = fieldType === 'file' ? 'block' : 'none';
+
+    if (deCheckbox) {
+        deCheckbox.disabled = !isChoice;
+        if (!isChoice) {
+            deCheckbox.checked = false;
+            document.getElementById(`eligibleOpts_${index}`).style.display = 'none';
+        }
+        deLabel.className = `flex items-center gap-2 text-sm font-medium cursor-pointer ${isChoice ? 'text-purple-700' : 'text-gray-400'}`;
     }
-    if (fileSizeDiv) {
-        fileSizeDiv.style.display = fieldType === 'file' ? 'block' : 'none';
-    }
+}
+
+function toggleEligibleOptions(index) {
+    const checked = document.getElementById(`de_${index}`).checked;
+    const div = document.getElementById(`eligibleOpts_${index}`);
+    if (div) div.style.display = checked ? 'block' : 'none';
 }
 
 function removeQuestion(btn) {

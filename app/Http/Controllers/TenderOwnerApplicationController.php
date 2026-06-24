@@ -17,11 +17,14 @@ class TenderOwnerApplicationController extends Controller
 {
     public function index(Request $request)
     {
-        $user = auth()->user();
-        $tenderIds = $user->ownedTenders()->pluck('id');
+        $user       = auth()->user();
+        $tenderType = in_array($request->tender_type, ['online', 'postal']) ? $request->tender_type : 'online';
+
+        $allTenderIds  = $user->ownedTenders()->pluck('id');
+        $typeTenderIds = $user->ownedTenders()->where('tender_type', $tenderType)->pluck('id');
 
         $query = TenderApplication::with(['tender', 'vendor'])
-            ->whereIn('tender_id', $tenderIds);
+            ->whereIn('tender_id', $typeTenderIds);
 
         if ($request->status && $request->status != 'all') {
             $query->where('status', $request->status);
@@ -30,24 +33,25 @@ class TenderOwnerApplicationController extends Controller
             $query->where('tender_id', $request->tender_id);
         }
 
-        $applications = $query->orderBy('created_at', 'desc')->paginate(15);
+        $applications = $query->orderBy('created_at', 'desc')->paginate(15)->withQueryString();
 
+        $typeScope = TenderApplication::whereIn('tender_id', $typeTenderIds);
         $stats = [
-            'total'       => TenderApplication::whereIn('tender_id', $tenderIds)->count(),
-            'submitted'   => TenderApplication::whereIn('tender_id', $tenderIds)->where('status', 'submitted')->count(),
-            'shortlisted' => TenderApplication::whereIn('tender_id', $tenderIds)->where('status', 'shortlisted')->count(),
-            'rejected'    => TenderApplication::whereIn('tender_id', $tenderIds)->where('status', 'rejected')->count(),
-            'awarded'     => TenderApplication::whereIn('tender_id', $tenderIds)->where('status', 'awarded')->count(),
+            'total'       => (clone $typeScope)->count(),
+            'submitted'   => (clone $typeScope)->where('status', 'submitted')->count(),
+            'shortlisted' => (clone $typeScope)->where('status', 'shortlisted')->count(),
+            'rejected'    => (clone $typeScope)->where('status', 'rejected')->count(),
+            'awarded'     => (clone $typeScope)->where('status', 'awarded')->count(),
         ];
 
-        $tenders = $user->ownedTenders()->get();
+        $tenders = $user->ownedTenders()->where('tender_type', $tenderType)->get();
 
-        return view('tender-owner.applications.index', compact('applications', 'stats', 'tenders'));
+        return view('tender-owner.applications.index', compact('applications', 'stats', 'tenders', 'tenderType'));
     }
 
     public function show($id)
     {
-        $application = TenderApplication::with(['tender', 'vendor', 'tender.owner'])->findOrFail($id);
+        $application = TenderApplication::with(['tender', 'vendor', 'tender.owner', 'eligibilityAnswers.question'])->findOrFail($id);
 
         if ($application->tender->owner_id !== auth()->id()) {
             abort(403, 'You do not have permission to view this application.');

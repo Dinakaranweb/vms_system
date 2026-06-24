@@ -50,4 +50,56 @@ class EligibilityFailureController extends Controller
             ], 500);
         }
     }
+
+    public function ownerIndex(Request $request)
+    {
+        $user      = auth()->user();
+        $ownedIds  = $user->ownedTenders()->pluck('id');
+        $tenders   = Tender::whereIn('id', $ownedIds)
+                        ->whereHas('eligibilityQuestions')
+                        ->orderBy('title')
+                        ->get(['id', 'title', 'tender_number']);
+        $tenderId  = $request->tender_id;
+        return view('tender-owner.eligibility_failures.index', compact('tenders', 'tenderId'));
+    }
+
+    public function ownerData(Request $request)
+    {
+        try {
+            $user     = auth()->user();
+            $ownedIds = $user->ownedTenders()->pluck('id');
+
+            $query = EligibilityFailure::with(['tender', 'vendor'])
+                ->whereIn('tender_id', $ownedIds)
+                ->orderBy('created_at', 'desc');
+
+            if ($request->tender_id) {
+                $query->where('tender_id', $request->tender_id);
+            }
+
+            if ($request->search) {
+                $search = $request->search;
+                $query->whereHas('vendor', function ($q) use ($search) {
+                    $q->where('company_name', 'like', "%{$search}%")
+                      ->orWhere('email', 'like', "%{$search}%");
+                });
+            }
+
+            $failures = $query->paginate(20);
+
+            return response()->json([
+                'success'      => true,
+                'data'         => $failures->items(),
+                'total'        => $failures->total(),
+                'current_page' => $failures->currentPage(),
+                'last_page'    => $failures->lastPage(),
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('EligibilityFailure ownerData error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
 }

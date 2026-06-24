@@ -32,6 +32,11 @@ Route::middleware('guest')->group(function () {
     Route::post('/login', [AuthController::class, 'login'])->name('login.post');
     Route::get('/register', [AuthController::class, 'showRegister'])->name('register');
     Route::post('/register', [AuthController::class, 'register'])->name('register.post');
+    // Password reset
+    Route::get('/forgot-password', [AuthController::class, 'showForgotForm'])->name('password.request');
+    Route::post('/forgot-password', [AuthController::class, 'sendResetLink'])->name('password.email');
+    Route::get('/reset-password/{token}', [AuthController::class, 'showResetForm'])->name('password.reset');
+    Route::post('/reset-password', [AuthController::class, 'resetPassword'])->name('password.update');
 });
 
 // ==================== LOGOUT ====================
@@ -314,9 +319,18 @@ Route::middleware(['auth', 'role:tender-owner'])->prefix('tender-owner')->name('
     Route::post('/applications/{id}/award', [TenderOwnerApplicationController::class, 'award'])->name('applications.award');
     Route::get('/applications/stats', [TenderOwnerApplicationController::class, 'getStats'])->name('applications.stats');
     
-    // Contracts (tender-owner view via ContractController)
+    // Contracts — full management for tender-owner
     Route::get('/contracts', [ContractController::class, 'index'])->name('contracts.index');
     Route::get('/contracts/{id}', [ContractController::class, 'show'])->name('contracts.show');
+    Route::post('/contracts/{id}/sign', [ContractController::class, 'sign'])->name('contracts.sign');
+    Route::post('/contracts/{id}/extend', [ContractController::class, 'extend'])->name('contracts.extend');
+    Route::post('/contracts/{id}/terminate', [ContractController::class, 'terminate'])->name('contracts.terminate');
+    Route::get('/contracts/{id}/work-order', [WorkOrderController::class, 'showForm'])->name('contracts.work-order');
+    Route::get('/contracts/{id}/order-pdf', [ContractController::class, 'downloadOrderPdf'])->name('contracts.order-pdf');
+    Route::post('/contracts/{id}/work-order/download', [WorkOrderController::class, 'downloadPdf'])->name('contracts.work-order.download');
+    Route::post('/contracts/{id}/work-order/email', [WorkOrderController::class, 'sendEmail'])->name('contracts.work-order.email');
+    Route::post('/contracts/{id}/supporting-docs', [ContractController::class, 'uploadSupportingDocs'])->name('contracts.supporting-docs.upload');
+    Route::delete('/contracts/{id}/supporting-docs', [ContractController::class, 'deleteSupportingDoc'])->name('contracts.supporting-docs.delete');
     
     // Documents
     Route::delete('/tenders/documents/{id}', [TenderController::class, 'ownerDeleteDocument'])->name('tenders.delete-document');
@@ -329,6 +343,10 @@ Route::middleware(['auth', 'role:tender-owner'])->prefix('tender-owner')->name('
     Route::post('/tenders/{id}/committee/add', [TenderOwnerController::class, 'addCommitteeMember'])->name('committee.add');
     Route::post('/tenders/{id}/committee/create-user', [TenderOwnerController::class, 'createAndAddCommitteeMember'])->name('committee.create-user');
     Route::delete('/tenders/{tenderId}/committee/remove/{userId}', [TenderOwnerController::class, 'removeCommitteeMember'])->name('committee.remove');
+
+    // Eligibility Failures
+    Route::get('/eligibility-failures', [\App\Http\Controllers\EligibilityFailureController::class, 'ownerIndex'])->name('eligibility-failures');
+    Route::get('/eligibility-failures/data', [\App\Http\Controllers\EligibilityFailureController::class, 'ownerData'])->name('eligibility-failures.data');
 
     // Reports
     Route::get('/reports', [ReportController::class, 'index'])->name('reports');

@@ -23,27 +23,33 @@ class ApplicationController extends Controller
      */
     public function index(Request $request)
     {
-        $user = auth()->user();
-        $tenderId = $request->tender_id;
+        $user         = auth()->user();
+        $tenderId     = $request->tender_id;
         $statusFilter = $request->status;
+        $tenderType   = in_array($request->tender_type, ['online', 'postal']) ? $request->tender_type : 'online';
 
         if ($user->hasRole('super-admin') || $user->hasRole('admin')) {
-            $tenders = Tender::orderBy('title')->get(['id', 'title', 'tender_number']);
-            $query   = TenderApplication::with(['tender', 'vendor'])->orderBy('created_at', 'desc');
+            $tenders = Tender::where('tender_type', $tenderType)->orderBy('title')->get(['id', 'title', 'tender_number']);
+            $query   = TenderApplication::with(['tender', 'vendor'])
+                           ->whereHas('tender', fn($q) => $q->where('tender_type', $tenderType))
+                           ->orderBy('created_at', 'desc');
         } elseif ($user->hasRole('tender-owner')) {
-            $tenders = $user->ownedTenders()->orderBy('title')->get(['id', 'title', 'tender_number']);
+            $tenders = $user->ownedTenders()->where('tender_type', $tenderType)->orderBy('title')->get(['id', 'title', 'tender_number']);
             $query   = TenderApplication::whereIn('tender_id', $tenders->pluck('id'))
                            ->with(['tender', 'vendor'])->orderBy('created_at', 'desc');
         } elseif (method_exists($user, 'committeeTenders') && $user->committeeTenders()->exists()) {
             $committeeIds = $user->committeeTenders()->wherePivot('is_active', true)->pluck('tender_id');
-            $tenders = Tender::whereIn('id', $committeeIds)->orderBy('title')->get(['id', 'title', 'tender_number']);
+            $tenders = Tender::whereIn('id', $committeeIds)->where('tender_type', $tenderType)->orderBy('title')->get(['id', 'title', 'tender_number']);
             $query   = TenderApplication::whereIn('tender_id', $committeeIds)
+                           ->whereHas('tender', fn($q) => $q->where('tender_type', $tenderType))
                            ->with(['tender', 'vendor'])->orderBy('created_at', 'desc');
         } else {
             $tenders = collect();
             $vendor  = $user->vendor;
             $query   = $vendor
-                ? TenderApplication::where('vendor_id', $vendor->id)->with(['tender', 'vendor'])->orderBy('created_at', 'desc')
+                ? TenderApplication::where('vendor_id', $vendor->id)
+                      ->whereHas('tender', fn($q) => $q->where('tender_type', $tenderType))
+                      ->with(['tender', 'vendor'])->orderBy('created_at', 'desc')
                 : TenderApplication::whereRaw('0=1');
         }
 
@@ -56,15 +62,16 @@ class ApplicationController extends Controller
 
         $applications = $query->paginate(15)->withQueryString();
 
+        $typeScope = TenderApplication::whereHas('tender', fn($q) => $q->where('tender_type', $tenderType));
         $stats = [
-            'total'       => TenderApplication::count(),
-            'submitted'   => TenderApplication::where('status', 'submitted')->count(),
-            'shortlisted' => TenderApplication::where('status', 'shortlisted')->count(),
-            'rejected'    => TenderApplication::where('status', 'rejected')->count(),
-            'awarded'     => TenderApplication::where('status', 'awarded')->count(),
+            'total'       => (clone $typeScope)->count(),
+            'submitted'   => (clone $typeScope)->where('status', 'submitted')->count(),
+            'shortlisted' => (clone $typeScope)->where('status', 'shortlisted')->count(),
+            'rejected'    => (clone $typeScope)->where('status', 'rejected')->count(),
+            'awarded'     => (clone $typeScope)->where('status', 'awarded')->count(),
         ];
 
-        return view('admin.applications.index', compact('applications', 'stats', 'tenders', 'tenderId', 'statusFilter'));
+        return view('admin.applications.index', compact('applications', 'stats', 'tenders', 'tenderId', 'statusFilter', 'tenderType'));
     }
 
     /**
@@ -72,7 +79,7 @@ class ApplicationController extends Controller
      */
     public function show($id)
 {
-    $application = TenderApplication::with(['tender', 'vendor', 'tender.creator'])->findOrFail($id);
+    $application = TenderApplication::with(['tender', 'vendor', 'tender.creator', 'eligibilityAnswers.question'])->findOrFail($id);
     
     // Check if user has access to this application
     $user = auth()->user();

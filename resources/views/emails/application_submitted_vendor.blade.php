@@ -43,7 +43,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#f4f6f9;margin:0;padding
             <div class="row"><strong>Tender No.</strong><span>{{ $application->tender->tender_number }}</span></div>
             <div class="row"><strong>Tender Title</strong><span>{{ $application->tender->title }}</span></div>
             <div class="row"><strong>Tender Type</strong><span>{{ ucfirst($application->tender->tender_type) }}</span></div>
-            <div class="row"><strong>Bid Amount</strong><span>₹ {{ number_format($application->bid_amount, 2) }}</span></div>
+            <div class="row"><strong>Bid Amount</strong><span>{{ ($application->bid_amount !== null && $application->bid_amount > 0) ? '₹ ' . number_format($application->bid_amount, 2) : 'N/A' }}</span></div>
             <div class="row"><strong>Status</strong><span class="badge-info">Submitted</span></div>
             <div class="row"><strong>Submitted On</strong><span>{{ $application->submitted_at?->format('d M Y, h:i A') ?? now()->format('d M Y, h:i A') }}</span></div>
         </div>

@@ -54,7 +54,17 @@ class WorkOrderController extends Controller
     {
         $contract = Contract::with(['tender', 'vendor', 'application'])->findOrFail($contractId);
         $presets  = self::presetTerms();
-        return view('admin.contracts.work_order_form', compact('contract', 'presets'));
+        $user     = auth()->user();
+
+        if ($user->hasRole('super-admin')) {
+            $rp = 'super-admin';
+        } elseif ($user->hasRole('tender-owner')) {
+            $rp = 'tender-owner';
+        } else {
+            $rp = 'admin';
+        }
+
+        return view('admin.contracts.work_order_form', compact('contract', 'presets', 'rp'));
     }
 
     /**

@@ -40,6 +40,11 @@ class User extends Authenticatable
                     ->withTimestamps();
     }
     
+    public function sendPasswordResetNotification($token): void
+    {
+        \Mail::to($this->email)->send(new \App\Mail\PasswordResetMail($this, $token));
+    }
+
     // ==================== ROLE CHECK METHODS ====================
     
     public function isSuperAdmin()

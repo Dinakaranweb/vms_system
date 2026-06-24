@@ -78,7 +78,13 @@
                     <tr class="hover:bg-gray-50 transition">
                         <td class="px-6 py-4 text-sm font-mono font-medium text-gray-900">{{ $app->application_number }}</td>
                         <td class="px-6 py-4 text-sm text-gray-900">{{ Str::limit($app->tender->title ?? 'N/A', 40) }}</td>
-                        <td class="px-6 py-4 text-sm font-semibold text-green-600">₹{{ number_format($app->bid_amount, 2) }}</td>
+                        <td class="px-6 py-4 text-sm font-semibold text-green-600">
+                            @if($app->bid_amount !== null && $app->bid_amount > 0)
+                                ₹{{ number_format($app->bid_amount, 2) }}
+                            @else
+                                <span class="text-gray-400 text-xs">N/A</span>
+                            @endif
+                        </td>
                         <td class="px-6 py-4">
                             @if($app->status == 'submitted')
                                 <span class="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs">Submitted</span>

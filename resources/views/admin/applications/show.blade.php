@@ -28,10 +28,14 @@
             <p class="text-gray-900">{{ $application->vendor->company_name ?? 'N/A' }}</p>
             <p class="text-xs text-gray-500">{{ $application->vendor->vendor_code ?? 'N/A' }}</p>
         </div>
+        @if(!($application->tender && $application->tender->isPostal()))
         <div>
             <label class="text-xs text-gray-500 uppercase">Bid Amount</label>
-            <p class="text-lg font-bold text-green-600">₹{{ number_format($application->bid_amount, 2) }}</p>
+            <p class="text-lg font-bold text-green-600">
+                @if($application->bid_amount !== null && $application->bid_amount > 0)₹{{ number_format($application->bid_amount, 2) }}@else<span class="text-gray-400 text-sm font-normal">N/A</span>@endif
+            </p>
         </div>
+        @endif
         <div>
             <label class="text-xs text-gray-500 uppercase">Submitted On</label>
             <p class="text-gray-900">{{ $application->created_at->format('d M, Y H:i') }}</p>
@@ -52,6 +56,58 @@
         @endif
     </div>
     
+    <!-- Eligibility Answers Section -->
+    @if($application->eligibilityAnswers && $application->eligibilityAnswers->count() > 0)
+    <div class="mt-4 pt-4 border-t">
+        <h4 class="font-semibold text-gray-800 mb-3">
+            <i class="fas fa-question-circle mr-2 text-purple-600"></i>Eligibility Answers
+        </h4>
+        @php
+            $allDetermining = $application->eligibilityAnswers->filter(fn($a) => $a->question && $a->question->determines_eligibility);
+            $overallEligible = $allDetermining->every(fn($a) => $a->is_eligible);
+        @endphp
+        @if($allDetermining->count() > 0)
+        <div class="mb-3 px-3 py-2 rounded-lg {{ $overallEligible ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200' }}">
+            <span class="text-sm font-semibold {{ $overallEligible ? 'text-green-700' : 'text-red-700' }}">
+                <i class="fas {{ $overallEligible ? 'fa-check-circle' : 'fa-times-circle' }} mr-1"></i>
+                Eligibility: {{ $overallEligible ? 'ELIGIBLE' : 'NOT ELIGIBLE' }}
+            </span>
+        </div>
+        @endif
+        <div class="space-y-2">
+            @foreach($application->eligibilityAnswers->sortBy('question.order') as $answer)
+            @if($answer->question)
+            <div class="bg-gray-50 rounded-lg p-3 {{ $answer->question->determines_eligibility ? 'border-l-4 ' . ($answer->is_eligible ? 'border-green-500' : 'border-red-500') : '' }}">
+                <div class="flex justify-between items-start">
+                    <div class="flex-1">
+                        <p class="text-sm font-medium text-gray-800">
+                            {{ $answer->question->question }}
+                            @if($answer->question->determines_eligibility)
+                                <span class="ml-2 text-xs px-2 py-0.5 rounded-full {{ $answer->is_eligible ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700' }}">
+                                    {{ $answer->is_eligible ? '✓ Eligible' : '✗ Not Eligible' }}
+                                </span>
+                            @else
+                                <span class="ml-2 text-xs text-gray-400">(Info only)</span>
+                            @endif
+                        </p>
+                        <p class="text-sm text-gray-600 mt-1">
+                            @if($answer->file_path)
+                                <a href="{{ Storage::url($answer->file_path) }}" target="_blank" class="text-blue-600 hover:underline">
+                                    <i class="fas fa-file mr-1"></i>View Uploaded File
+                                </a>
+                            @else
+                                {{ $answer->answer ?: '(No answer provided)' }}
+                            @endif
+                        </p>
+                    </div>
+                </div>
+            </div>
+            @endif
+            @endforeach
+        </div>
+    </div>
+    @endif
+
     <!-- Application Documents Section -->
     @if($application->documents && count($application->documents) > 0)
     <div class="mt-4 pt-4 border-t">

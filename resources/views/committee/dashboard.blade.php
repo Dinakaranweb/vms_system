@@ -105,9 +105,13 @@
                                 <p class="text-xs text-gray-400 mt-0.5">
                                     {{ $app->application_number }} &nbsp;·&nbsp; {{ $app->tender->tender_number }}
                                 </p>
-                                @if($app->bid_amount)
-                                <p class="text-xs text-gray-500 mt-0.5">Bid: ₹{{ number_format($app->bid_amount, 2) }}</p>
-                                @endif
+                                <p class="text-xs text-gray-500 mt-0.5">
+                                    @if($app->bid_amount !== null && $app->bid_amount > 0)
+                                        Bid: ₹{{ number_format($app->bid_amount, 2) }}
+                                    @else
+                                        Bid: N/A
+                                    @endif
+                                </p>
                             </div>
                             <div class="flex items-center gap-2 flex-shrink-0">
                                 <span class="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">

@@ -60,12 +60,14 @@
                     <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Financials</h4>
                 </div>
                 <div class="px-5 py-4 space-y-3">
-                    @if($application->bid_amount)
                     <div>
                         <p class="text-xs text-gray-400">Bid Amount</p>
+                        @if($application->bid_amount !== null && $application->bid_amount > 0)
                         <p class="text-xl font-bold text-gray-900">₹{{ number_format($application->bid_amount, 2) }}</p>
+                        @else
+                        <p class="text-sm text-gray-400 font-medium">N/A</p>
+                        @endif
                     </div>
-                    @endif
                     @if($application->emda_paid_amount)
                     <div>
                         <p class="text-xs text-gray-400">EMD Paid</p>

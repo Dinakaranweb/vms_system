@@ -55,7 +55,23 @@ class VendorController extends Controller
         $recentContracts = Contract::where('vendor_id', $vendor->id)
             ->with('tender')->latest()->take(5)->get();
 
-        return view('vendor.dashboard', compact('stats', 'openTenders', 'privateTendersAssigned', 'recentApplications', 'recentContracts'));
+        // Last 6 months application trend
+        $appMonthly = [];
+        for ($i = 5; $i >= 0; $i--) {
+            $m = now()->subMonths($i);
+            $appMonthly[] = [
+                'label' => $m->format('M y'),
+                'count' => TenderApplication::where('vendor_id', $vendor->id)
+                    ->whereYear('created_at', $m->year)
+                    ->whereMonth('created_at', $m->month)
+                    ->count(),
+            ];
+        }
+
+        return view('vendor.dashboard', compact(
+            'stats', 'openTenders', 'privateTendersAssigned',
+            'recentApplications', 'recentContracts', 'appMonthly'
+        ));
     }
 
     // ==================== TENDERS ====================
@@ -98,8 +114,18 @@ class VendorController extends Controller
               });
         });
 
+        $type = request('type', 'online');
+        if (in_array($type, ['online', 'postal'])) {
+            $query->where('tender_type', $type);
+        }
+
         $tenders = $query->orderBy('submission_deadline', 'asc')->paginate(10);
-        return view('vendor.tenders.index', compact('tenders'));
+
+        $appliedTenderIds = TenderApplication::where('vendor_id', $vendor->id)
+            ->pluck('tender_id')
+            ->flip(); // use as hash-map for O(1) lookup in the view
+
+        return view('vendor.tenders.index', compact('tenders', 'type', 'appliedTenderIds'));
     }
 
     public function tenderDetails($id)
@@ -140,6 +166,12 @@ class VendorController extends Controller
         }
 
         $hasQuestions = $tender->eligibilityQuestions()->count() > 0;
+
+        // No eligibility questions → vendor is auto-eligible; pre-set the session flag
+        if (!$hasQuestions) {
+            session(["eligible_tender_{$tender->id}" => true]);
+        }
+
         return view('vendor.tenders.apply', compact('tender', 'vendor', 'hasQuestions'));
     }
 
@@ -236,6 +268,7 @@ class VendorController extends Controller
             ]);
         }
 
+        session(["eligible_tender_{$id}" => true]);
         return response()->json(['eligible' => true]);
     }
 
@@ -246,36 +279,61 @@ class VendorController extends Controller
         $tender = Tender::with('eligibilityQuestions')->findOrFail($id);
         $vendor  = Auth::user()->vendor;
 
+        // Prevent duplicate applications (online & postal)
+        if (TenderApplication::where('tender_id', $tender->id)->where('vendor_id', $vendor->id)->exists()) {
+            return redirect()->route('vendor.tenders.show', $id)
+                ->with('error', 'You have already submitted an application for this tender.');
+        }
+
         $rules = [];
-        $rules['bid_amount']         = ($tender->require_bid_amount    ?? true) ? 'required|numeric|min:0'  : 'nullable|numeric|min:0';
-        $rules['technical_proposal'] = ($tender->require_technical_bid ?? true) ? 'required|string'         : 'nullable|string';
-        $rules['financial_proposal'] = ($tender->require_financial_bid ?? true) ? 'required|string'         : 'nullable|string';
+        // Postal tenders: bid/proposals not required (submitted physically)
+        if ($tender->isPostal()) {
+            $rules['bid_amount']         = 'nullable|numeric|min:0';
+            $rules['technical_proposal'] = 'nullable|string';
+            $rules['financial_proposal'] = 'nullable|string';
+        } else {
+            $rules['bid_amount']         = ($tender->require_bid_amount    ?? true) ? 'required|numeric|min:0'  : 'nullable|numeric|min:0';
+            $rules['technical_proposal'] = ($tender->require_technical_bid ?? true) ? 'required|string'         : 'nullable|string';
+            $rules['financial_proposal'] = ($tender->require_financial_bid ?? true) ? 'required|string'         : 'nullable|string';
+        }
         $request->validate($rules);
 
         DB::beginTransaction();
         try {
-            // Re-check eligibility server-side before creating the application
-            $allEligible = true;
-            foreach ($tender->eligibilityQuestions as $question) {
-                if (!$question->determines_eligibility) {
-                    continue;
+            // Check eligibility: session is the primary source (set by the AJAX check endpoint).
+            // Fall back to re-evaluating request data for vendors who bypass the JS flow.
+            $hasDeterminingQuestions = $tender->eligibilityQuestions
+                ->filter(fn($q) => $q->determines_eligibility && !empty($q->eligible_options))
+                ->isNotEmpty();
+
+            $sessionKey  = "eligible_tender_{$tender->id}";
+            $sessionPass = session($sessionKey, false);
+
+            if ($hasDeterminingQuestions && !$sessionPass) {
+                // Session not set — re-evaluate using request data (direct POST bypass attempt)
+                $allEligible = true;
+                foreach ($tender->eligibilityQuestions as $question) {
+                    if (!$question->determines_eligibility) continue;
+                    $answer = $request->input("eligibility_answers.{$question->id}");
+                    if (!$this->checkEligibility($question, $answer)) {
+                        $allEligible = false;
+                        break;
+                    }
                 }
-                $answer = $request->input("eligibility_answers.{$question->id}");
-                if (!$this->checkEligibility($question, $answer)) {
-                    $allEligible = false;
-                    break;
+
+                if (!$allEligible) {
+                    DB::rollback();
+                    try {
+                        Mail::to($vendor->email)->send(new EligibilityFailedMail($tender, $vendor));
+                    } catch (\Exception $e) {
+                        \Log::error('Eligibility failed email error: ' . $e->getMessage());
+                    }
+                    return back()->withErrors(['eligibility' => 'You do not meet the eligibility criteria for this tender.']);
                 }
             }
 
-            if (!$allEligible) {
-                DB::rollback();
-                try {
-                    Mail::to($vendor->email)->send(new EligibilityFailedMail($tender, $vendor));
-                } catch (\Exception $e) {
-                    \Log::error('Eligibility failed email error: ' . $e->getMessage());
-                }
-                return back()->withErrors(['eligibility' => 'You do not meet the eligibility criteria for this tender.']);
-            }
+            // Clear the session flag after a successful eligibility gate pass
+            session()->forget($sessionKey);
 
             // Handle online document uploads
             $uploadedDocuments = [];
@@ -290,16 +348,28 @@ class VendorController extends Controller
                 }
             }
 
+            // Handle proposal file uploads (when vendor uploads doc instead of typing)
+            $techProposalFile = null;
+            $finProposalFile  = null;
+            if ($request->hasFile('technical_proposal_file')) {
+                $techProposalFile = $request->file('technical_proposal_file')->store('application-documents/' . $tender->id, 'public');
+            }
+            if ($request->hasFile('financial_proposal_file')) {
+                $finProposalFile = $request->file('financial_proposal_file')->store('application-documents/' . $tender->id, 'public');
+            }
+
             $application = TenderApplication::create([
-                'tender_id'           => $tender->id,
-                'vendor_id'           => $vendor->id,
-                'bid_amount'          => $request->bid_amount,
-                'technical_proposal'  => $request->technical_proposal,
-                'financial_proposal'  => $request->financial_proposal,
-                'documents'           => $uploadedDocuments ?: null,
-                'status'              => 'submitted',
-                'submitted_by'        => Auth::id(),
-                'submitted_at'        => now(),
+                'tender_id'               => $tender->id,
+                'vendor_id'               => $vendor->id,
+                'bid_amount'              => $tender->isPostal() ? null : $request->bid_amount,
+                'technical_proposal'      => $request->technical_proposal,
+                'technical_proposal_file' => $techProposalFile,
+                'financial_proposal'      => $request->financial_proposal,
+                'financial_proposal_file' => $finProposalFile,
+                'documents'               => $uploadedDocuments ?: null,
+                'status'                  => 'submitted',
+                'submitted_by'            => Auth::id(),
+                'submitted_at'            => now(),
             ]);
 
             // Save eligibility answers
@@ -317,7 +387,7 @@ class VendorController extends Controller
                     'question_id'           => $question->id,
                     'answer'                => is_array($answer) ? json_encode($answer) : $answer,
                     'file_path'             => $filePath,
-                    'is_eligible'           => true,
+                    'is_eligible'           => $this->checkEligibility($question, $answer),
                 ]);
             }
 

@@ -258,10 +258,11 @@
                                     <div class="flex items-center space-x-3 flex-1">
                                         @php
                                             $extension = pathinfo($doc->file_name, PATHINFO_EXTENSION);
-                                            $fileUrl = asset('storage/' . $doc->file_path);
-                                            if (str_starts_with($doc->file_path, 'public/')) {
-                                                $fileUrl = asset('storage/' . substr($doc->file_path, 7));
-                                            }
+                                            // Some legacy rows stored the path with a leading "public/".
+                                            $docPath = str_starts_with($doc->file_path, 'public/')
+                                                ? substr($doc->file_path, 7)
+                                                : $doc->file_path;
+                                            $fileUrl = Storage::url($docPath);
                                         @endphp
                                         @if(in_array($extension, ['jpg', 'jpeg', 'png', 'gif']))
                                             <i class="fas fa-file-image text-blue-500 text-xl"></i>

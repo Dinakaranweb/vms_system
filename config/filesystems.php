@@ -62,8 +62,11 @@ return [
                 'secret' => env('AWS_SECRET_ACCESS_KEY'),
                 'region' => env('AWS_DEFAULT_REGION'),
                 'bucket' => env('AWS_BUCKET'),
-                'url' => env('AWS_URL'),
-                'endpoint' => env('AWS_ENDPOINT'),
+                // ?: null matters. An empty "AWS_URL=" line in .env gives "" rather than null,
+                // and isset("") is true, so Laravel would treat it as an explicit base URL and
+                // return "/key" instead of the bucket URL. Same hazard for the endpoint.
+                'url' => env('AWS_URL') ?: null,
+                'endpoint' => env('AWS_ENDPOINT') ?: null,
                 'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
                 // Optional key prefix inside the bucket, e.g. "vms" → vms/tender-documents/...
                 'root' => env('AWS_ROOT', ''),
@@ -86,8 +89,8 @@ return [
             'secret' => env('AWS_SECRET_ACCESS_KEY'),
             'region' => env('AWS_DEFAULT_REGION'),
             'bucket' => env('AWS_BUCKET'),
-            'url' => env('AWS_URL'),
-            'endpoint' => env('AWS_ENDPOINT'),
+            'url' => env('AWS_URL') ?: null,
+            'endpoint' => env('AWS_ENDPOINT') ?: null,
             'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
             'root' => env('AWS_ROOT', ''),
             'visibility' => 'public',

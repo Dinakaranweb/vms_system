@@ -50,7 +50,10 @@ class ApplicationReceivedDocument extends Model
 
     public function getUrl(): string
     {
-        return asset('storage/' . $this->file_path);
+        // Storage::url() follows whichever driver the public disk is on, so this keeps
+        // working when PUBLIC_DISK_DRIVER flips to s3. asset() would always build a
+        // local /storage URL and 404 against the bucket.
+        return Storage::url($this->file_path);
     }
 
     /**

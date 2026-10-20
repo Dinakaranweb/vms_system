@@ -86,7 +86,7 @@
         </div>
         <div class="divide-y divide-gray-50">
             @foreach($tender->documents as $doc)
-            <a href="{{ asset('storage/' . $doc->file_path) }}" target="_blank"
+            <a href="{{ Storage::url($doc->file_path) }}" target="_blank"
                class="px-6 py-3 flex items-center justify-between gap-3 hover:bg-gray-50 transition">
                 <span class="text-sm text-gray-700 truncate">
                     <i class="fas fa-file-lines text-gray-300 mr-2"></i>{{ $doc->title ?? $doc->file_name ?? 'Document' }}
@@ -144,7 +144,7 @@
                         default    => ['fa-cloud-arrow-up text-blue-400',        'bg-blue-50 text-blue-700',       'Online'],
                     };
                 @endphp
-                <a href="{{ asset('storage/' . $file['path']) }}" target="_blank"
+                <a href="{{ Storage::url($file['path']) }}" target="_blank"
                    class="px-6 py-3 flex items-center justify-between gap-3 hover:bg-gray-50 transition">
                     <span class="text-sm text-gray-700 truncate min-w-0">
                         <i class="fas {{ $fIcon }} mr-2"></i>

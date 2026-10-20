@@ -51,6 +51,12 @@ class Tender extends Model
         'require_emd',
         'require_estimated_value',
         'email_notifications_enabled',
+        'start_date',
+        'auto_publish',
+        'bid_opening_at',
+        'bid_opened_by',
+        'review_opened_at',
+        'review_opened_by',
     ];
 
     protected $casts = [
@@ -60,9 +66,11 @@ class Tender extends Model
         'estimated_value' => 'decimal:2',
         'emda_amount' => 'decimal:2',
         'published_date' => 'date',
+        'start_date' => 'date',
         'submission_deadline' => 'date',
         'opening_date' => 'date',
         'postal_receipt_deadline' => 'date',
+        'auto_publish' => 'boolean',
         'approved_at' => 'datetime',
         'is_private'               => 'boolean',
         'is_owner_controlled'   => 'boolean',
@@ -76,6 +84,8 @@ class Tender extends Model
         'require_emd'              => 'boolean',
         'require_estimated_value'  => 'boolean',
         'email_notifications_enabled' => 'boolean',
+        'bid_opening_at' => 'datetime',
+        'review_opened_at' => 'datetime',
     ];
 
     // Boot method to generate tender number automatically
@@ -156,6 +166,31 @@ class Tender extends Model
                     ->withTimestamps();
     }
 
+    public function queries()
+    {
+        return $this->hasMany(TenderQuery::class, 'tender_id')->orderBy('created_at');
+    }
+
+    public function bidOpenedBy()
+    {
+        return $this->belongsTo(User::class, 'bid_opened_by');
+    }
+
+    public function awardRecommendations()
+    {
+        return $this->hasMany(AwardRecommendation::class);
+    }
+
+    public function reviewOpenedBy()
+    {
+        return $this->belongsTo(User::class, 'review_opened_by');
+    }
+
+    public function reviewOtps()
+    {
+        return $this->hasMany(TenderReviewOtp::class);
+    }
+
     // ==================== SCOPES ====================
     
     public function scopePublished($query)
@@ -194,6 +229,27 @@ class Tender extends Model
         return $query->where('tender_type', 'postal');
     }
 
+    public function scopeHybrid($query)
+    {
+        return $query->where('tender_type', 'hybrid');
+    }
+
+    /**
+     * Every tender that expects an online submission — online and hybrid alike.
+     */
+    public function scopeWithOnlineBids($query)
+    {
+        return $query->whereIn('tender_type', ['online', 'hybrid']);
+    }
+
+    /**
+     * Every tender that expects physical documents by post — postal and hybrid alike.
+     */
+    public function scopeWithPostalBids($query)
+    {
+        return $query->whereIn('tender_type', ['postal', 'hybrid']);
+    }
+
     // ==================== HELPER METHODS ====================
     
     public function isOpen(): bool
@@ -225,6 +281,130 @@ class Tender extends Model
     public function isPostal(): bool
     {
         return $this->tender_type === 'postal';
+    }
+
+    public function isHybrid(): bool
+    {
+        return $this->tender_type === 'hybrid';
+    }
+
+    /**
+     * A hybrid tender accepts BOTH an online submission and physical documents by post, so it
+     * has to satisfy both code paths. Prefer these two over isOnline()/isPostal() anywhere the
+     * question is "does this tender involve online/postal bids at all" rather than "is this
+     * tender exclusively online/postal".
+     */
+    public function hasOnlineBids(): bool
+    {
+        return $this->tender_type === 'online' || $this->isHybrid();
+    }
+
+    public function hasPostalBids(): bool
+    {
+        return $this->tender_type === 'postal' || $this->isHybrid();
+    }
+
+    public function getSubmissionModeLabel(): string
+    {
+        return match ($this->tender_type) {
+            'postal' => 'Postal',
+            'hybrid' => 'Hybrid (Online + Postal)',
+            default  => 'Online',
+        };
+    }
+
+    public function isBidOpen(): bool
+    {
+        return $this->bid_opening_at !== null;
+    }
+
+    /**
+     * Bid opening can only happen manually, and only after the tender has actually closed
+     * (deadline passed or status already 'closed') — never before, regardless of who clicks it.
+     */
+    public function canBeOpened(): bool
+    {
+        return !$this->isBidOpen() && $this->isClosed();
+    }
+
+    /**
+     * Opening a tender requires a code from every active Purchase Committee member. The codes
+     * are delivered to each member's own notifications, each member reads theirs out to the
+     * Purchase Officer in person, and the officer keys them all in on one screen — the tender
+     * only opens (bid_opening_at/review_opened_at set together) once the last code is accepted.
+     * See TenderController::openBidding() and TenderReviewController::openingOtpPanel().
+     */
+    public function isOpeningOtpPending(): bool
+    {
+        return !$this->isBidOpen() && $this->reviewOtps()->exists();
+    }
+
+    public function openingOtpsIssuedCount(): int
+    {
+        return $this->reviewOtps()->count();
+    }
+
+    public function openingOtpsVerifiedCount(): int
+    {
+        return $this->reviewOtps()->whereNotNull('otp_verified_at')->count();
+    }
+
+    public function openingOtpsOutstandingCount(): int
+    {
+        return $this->reviewOtps()->whereNull('otp_verified_at')->count();
+    }
+
+    /**
+     * Once opening is finalized, every active committee member can reach this tender's
+     * submitted documents from their own login — the online uploads, the postal scans, or
+     * both for a hybrid tender. Sharing is what review_opened_at records.
+     */
+    public function areDocumentsSharedWithCommittee(): bool
+    {
+        return $this->isReviewOpen();
+    }
+
+    public function allOpeningOtpsVerified(): bool
+    {
+        return $this->reviewOtps()->exists() && $this->reviewOtps()->whereNull('otp_verified_at')->doesntExist();
+    }
+
+    /**
+     * Whether this specific committee member has already verified their own opening code —
+     * usable even while the tender is still pending (isReviewUnlockedFor() requires the whole
+     * tender to be open, which isn't true yet for the members still waiting on each other).
+     */
+    public function hasVerifiedOpeningOtp(int $userId): bool
+    {
+        return $this->reviewOtps()->where('committee_member_id', $userId)->whereNotNull('otp_verified_at')->exists();
+    }
+
+    public function isReviewOpen(): bool
+    {
+        return $this->review_opened_at !== null;
+    }
+
+    /**
+     * Committee review can only start once bids are opened — otherwise members would be
+     * looking at sealed/incomplete data.
+     */
+    public function canOpenForReview(): bool
+    {
+        return $this->isBidOpen() && !$this->isReviewOpen();
+    }
+
+    /**
+     * A committee member can view/comment on this tender's applications once review has been
+     * opened AND that specific member has verified their own OTP for it.
+     */
+    public function isReviewUnlockedFor(int $userId): bool
+    {
+        if (!$this->isReviewOpen()) return false;
+
+        return $this->reviewOtps()
+            ->where('committee_member_id', $userId)
+            ->whereNotNull('otp_verified_at')
+            ->exists();
     }
 
     public function isPrivate(): bool
@@ -323,10 +503,13 @@ class Tender extends Model
 
     public function getTypeBadge(): string
     {
-        if ($this->isOnline()) {
-            return '<span class="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">Online</span>';
+        if ($this->isHybrid()) {
+            return '<span class="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-xs">Hybrid</span>';
         }
-        return '<span class="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">Postal</span>';
+        if ($this->isPostal()) {
+            return '<span class="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">Postal</span>';
+        }
+        return '<span class="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">Online</span>';
     }
 
     // ==================== ACTION METHODS ====================

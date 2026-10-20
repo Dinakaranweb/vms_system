@@ -393,6 +393,10 @@
 
         <!-- Navigation -->
         <nav class="sidebar-nav">
+            @php
+                $__roleId = Auth::user()->roles->first()?->id;
+                $hiddenSectionKeys = $__roleId ? \App\Models\MenuItem::hiddenSectionKeysForRole($__roleId) : [];
+            @endphp
 
             <!-- Dashboard -->
             @if(Auth::user()->hasRole('super-admin'))
@@ -420,7 +424,7 @@
             @endif
 
             <!-- Vendor Management -->
-            @if(Auth::user()->hasRole('admin') || Auth::user()->hasRole('super-admin'))
+            @if((Auth::user()->hasRole('admin') || Auth::user()->hasRole('super-admin')) && !in_array('vendor-management', $hiddenSectionKeys))
                 <div class="nav-section-label">Vendor Management</div>
 
                 <a href="{{ Auth::user()->hasRole('super-admin') ? route('super-admin.vendors') : route('admin.vendors') }}"
@@ -431,7 +435,7 @@
             @endif
 
             <!-- Tender Management (admin + super-admin) -->
-            @if(Auth::user()->hasRole('admin') || Auth::user()->hasRole('super-admin'))
+            @if((Auth::user()->hasRole('admin') || Auth::user()->hasRole('super-admin')) && !in_array('tender-management', $hiddenSectionKeys))
                 @php $rp = Auth::user()->hasRole('super-admin') ? 'super-admin' : 'admin'; @endphp
                 <div class="nav-section-label">Tender Management</div>
 
@@ -447,7 +451,7 @@
             @endif
 
             <!-- Applications (admin + super-admin) -->
-            @if(Auth::user()->hasRole('admin') || Auth::user()->hasRole('super-admin'))
+            @if((Auth::user()->hasRole('admin') || Auth::user()->hasRole('super-admin')) && !in_array('applications', $hiddenSectionKeys))
                 @php $rp = Auth::user()->hasRole('super-admin') ? 'super-admin' : 'admin'; @endphp
                 <div class="nav-section-label">Applications</div>
 
@@ -459,7 +463,7 @@
             @endif
 
             <!-- Contract Management (admin + super-admin) -->
-            @if(Auth::user()->hasRole('admin') || Auth::user()->hasRole('super-admin'))
+            @if((Auth::user()->hasRole('admin') || Auth::user()->hasRole('super-admin')) && !in_array('contract-management', $hiddenSectionKeys))
                 @php $rp = Auth::user()->hasRole('super-admin') ? 'super-admin' : 'admin'; @endphp
                 <div class="nav-section-label">Contract Management</div>
 
@@ -478,10 +482,19 @@
                     <i class="fas fa-chart-bar"></i>
                     <span>Reports</span>
                 </a>
+                @php $adminNotifCount = auth()->user()->unreadNotifications()->count(); @endphp
+                <a href="{{ route($rp . '.notifications') }}"
+                   class="nav-link {{ request()->routeIs($rp . '.notifications*') ? 'active' : '' }}">
+                    <i class="fas fa-bell"></i>
+                    <span>Notifications</span>
+                    @if($adminNotifCount > 0)
+                        <span class="nav-badge nav-badge-red">{{ $adminNotifCount }}</span>
+                    @endif
+                </a>
             @endif
 
             <!-- Vendor Portal -->
-            @if(Auth::user()->hasRole('vendor'))
+            @if(Auth::user()->hasRole('vendor') && !in_array('vendor-tenders', $hiddenSectionKeys))
                 <div class="nav-section-label">Tenders</div>
 
                 <a href="{{ route('vendor.tenders') }}?type=online"
@@ -509,10 +522,19 @@
                     <i class="fas fa-building"></i>
                     <span>Company Profile</span>
                 </a>
+                @php $vNotifCount = auth()->user()->unreadNotifications()->count(); @endphp
+                <a href="{{ route('vendor.notifications') }}"
+                   class="nav-link {{ request()->routeIs('vendor.notifications*') ? 'active' : '' }}">
+                    <i class="fas fa-bell"></i>
+                    <span>Notifications</span>
+                    @if($vNotifCount > 0)
+                        <span class="nav-badge nav-badge-red">{{ $vNotifCount }}</span>
+                    @endif
+                </a>
             @endif
 
             <!-- Tender Owner Portal -->
-            @if(Auth::user()->hasRole('tender-owner'))
+            @if(Auth::user()->hasRole('tender-owner') && !in_array('tender-owner-portal', $hiddenSectionKeys))
                 <div class="nav-section-label">Tender Owner Portal</div>
 
                 <a href="{{ route('tender-owner.dashboard') }}"
@@ -565,10 +587,20 @@
                     <i class="fas fa-plus-circle"></i>
                     <span>Create Tender</span>
                 </a>
+
+                @php $toNotifCount = auth()->user()->unreadNotifications()->count(); @endphp
+                <a href="{{ route('tender-owner.notifications') }}"
+                   class="nav-link {{ request()->routeIs('tender-owner.notifications') ? 'active' : '' }}">
+                    <i class="fas fa-bell"></i>
+                    <span>Notifications</span>
+                    @if($toNotifCount > 0)
+                        <span class="nav-badge nav-badge-red">{{ $toNotifCount }}</span>
+                    @endif
+                </a>
             @endif
 
             <!-- Committee Member Portal -->
-            @if(Auth::user()->hasRole('committee-member'))
+            @if(Auth::user()->hasRole('committee-member') && !in_array('committee-portal', $hiddenSectionKeys))
                 <div class="nav-section-label">Committee Portal</div>
 
                 <a href="{{ route('committee.dashboard') }}"
@@ -600,8 +632,56 @@
                 </a>
             @endif
 
+            @if(Auth::user()->hasRole('management') && !in_array('management-portal', $hiddenSectionKeys))
+                <div class="nav-section-label">Management Portal</div>
+
+                <a href="{{ route('management.dashboard') }}"
+                   class="nav-link {{ request()->routeIs('management.dashboard') ? 'active' : '' }}">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Dashboard</span>
+                </a>
+
+                <a href="{{ route('management.tenders.index') }}"
+                   class="nav-link {{ request()->routeIs('management.tenders*') ? 'active' : '' }}">
+                    <i class="fas fa-layer-group"></i>
+                    <span>All Tenders</span>
+                </a>
+            @endif
+
+            @if(Auth::user()->hasRole('purchase-committee'))
+                <div class="nav-section-label">Purchase Committee</div>
+
+                <a href="{{ route('purchase-committee.dashboard') }}"
+                   class="nav-link {{ request()->routeIs('purchase-committee.dashboard') ? 'active' : '' }}">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Dashboard</span>
+                </a>
+
+                <a href="{{ route('purchase-committee.tenders.index') }}"
+                   class="nav-link {{ request()->routeIs('purchase-committee.tenders.index') ? 'active' : '' }}">
+                    <i class="fas fa-layer-group"></i>
+                    <span>All Tenders</span>
+                </a>
+
+                <a href="{{ route('purchase-committee.recommendations.index') }}"
+                   class="nav-link {{ request()->routeIs('purchase-committee.recommendations.*') ? 'active' : '' }}">
+                    <i class="fas fa-gavel"></i>
+                    <span>Award Recommendations</span>
+                </a>
+
+                <a href="{{ route('purchase-committee.notifications') }}"
+                   class="nav-link {{ request()->routeIs('purchase-committee.notifications*') ? 'active' : '' }}">
+                    <i class="fas fa-bell"></i>
+                    <span>Notifications</span>
+                    @php $pcUnread = Auth::user()->unreadNotifications()->count(); @endphp
+                    @if($pcUnread > 0)
+                    <span style="margin-left:auto;background:#ef4444;color:#fff;font-size:10px;font-weight:700;border-radius:100px;padding:1px 6px;">{{ $pcUnread > 9 ? '9+' : $pcUnread }}</span>
+                    @endif
+                </a>
+            @endif
+
             <!-- System Administration -->
-            @if(Auth::user()->hasRole('admin') || Auth::user()->hasRole('super-admin'))
+            @if((Auth::user()->hasRole('admin') || Auth::user()->hasRole('super-admin')) && !in_array('system-administration', $hiddenSectionKeys))
                 @php $rp = Auth::user()->hasRole('super-admin') ? 'super-admin' : 'admin'; @endphp
                 <div class="nav-section-label">System Administration</div>
 
@@ -625,7 +705,22 @@
                     <span>Terms &amp; Conditions</span>
                 </a>
 
-                @if(Auth::user()->hasRole('super-admin'))
+                @if(Auth::user()->hasRole('super-admin') && !in_array('super-admin-tools', $hiddenSectionKeys))
+                <a href="{{ route('super-admin.roles.index') }}"
+                   class="nav-link {{ request()->routeIs('super-admin.roles.*') || request()->routeIs('super-admin.menu-builder.*') || request()->routeIs('super-admin.widget-builder.*') ? 'active' : '' }}">
+                    <i class="fas fa-user-shield"></i>
+                    <span>Role Builder</span>
+                </a>
+                <a href="{{ route('super-admin.purchase-committee.index') }}"
+                   class="nav-link {{ request()->routeIs('super-admin.purchase-committee.*') ? 'active' : '' }}">
+                    <i class="fas fa-gavel"></i>
+                    <span>Purchase Committee</span>
+                </a>
+                <a href="{{ route('super-admin.admins') }}"
+                   class="nav-link {{ request()->routeIs('super-admin.admins*') ? 'active' : '' }}">
+                    <i class="fas fa-user-shield"></i>
+                    <span>Manage Admins</span>
+                </a>
                 <a href="{{ route('super-admin.audit-logs') }}"
                    class="nav-link {{ request()->routeIs('super-admin.audit-logs*') ? 'active' : '' }}">
                     <i class="fas fa-history"></i>
@@ -636,6 +731,25 @@
                     <i class="fas fa-cog"></i>
                     <span>Settings</span>
                 </a>
+                @endif
+            @endif
+
+            {{-- Fully dynamic menu for any custom role created via the Role Builder (skips the 6 built-in roles, which already have their own sections above) --}}
+            @php
+                $__builtInRoles = ['super-admin', 'admin', 'tender-owner', 'vendor', 'committee-member', 'management'];
+                $__isCustomRole = $__roleId && !Auth::user()->hasAnyRole($__builtInRoles);
+            @endphp
+            @if($__isCustomRole)
+                @php $portalMenuItems = \App\Models\MenuItem::visibleForRole($__roleId, 'item'); @endphp
+                @if($portalMenuItems->isNotEmpty())
+                    <div class="nav-section-label">{{ $portalMenuItems->first()->section_label ?? 'Portal' }}</div>
+                    @foreach($portalMenuItems as $mi)
+                        <a href="{{ $mi->route_name ? route($mi->route_name) : '#' }}"
+                           class="nav-link {{ $mi->route_name && request()->routeIs(str_replace('.index', '*', $mi->route_name)) ? 'active' : '' }}">
+                            <i class="fas {{ $mi->icon ?? 'fa-circle' }}"></i>
+                            <span>{{ $mi->label }}</span>
+                        </a>
+                    @endforeach
                 @endif
             @endif
 
@@ -672,10 +786,118 @@
             </button>
 
             <div class="topbar-right">
-                <button class="notif-btn" aria-label="Notifications">
-                    <i class="fas fa-bell"></i>
-                    <span class="notif-dot"></span>
-                </button>
+                @php
+                    $bellUnread = auth()->user()->unreadNotifications()->count();
+                    $bellNotifs = auth()->user()->notifications()->latest()->take(7)->get();
+                    $bellPrefix = auth()->user()->hasRole('super-admin') ? 'super-admin'
+                                : (auth()->user()->hasRole('admin') ? 'admin'
+                                : (auth()->user()->hasRole('tender-owner') ? 'tender-owner'
+                                : (auth()->user()->hasRole('management') ? 'management'
+                                : (auth()->user()->hasRole('purchase-committee') ? 'purchase-committee'
+                                : (auth()->user()->hasRole('vendor') ? 'vendor' : 'portal')))));
+                @endphp
+                <div class="relative" x-data="{ bellOpen: false }" @click.outside="bellOpen = false">
+                    <button class="notif-btn" @click="bellOpen = !bellOpen" aria-label="Notifications">
+                        <i class="fas fa-bell"></i>
+                        @if($bellUnread > 0)
+                        <span class="notif-dot"></span>
+                        <span style="position:absolute;top:-5px;right:-5px;background:#ef4444;color:#fff;font-size:9px;font-weight:700;border-radius:50%;min-width:16px;height:16px;display:flex;align-items:center;justify-content:center;padding:0 3px;line-height:1;">{{ $bellUnread > 9 ? '9+' : $bellUnread }}</span>
+                        @endif
+                    </button>
+
+                    <div x-show="bellOpen" x-cloak x-transition:enter="transition ease-out duration-100"
+                         x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+                         class="absolute right-0 top-full mt-2 bg-white rounded-xl shadow-xl border border-gray-200 z-50"
+                         style="width:340px;">
+                        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                            <span class="font-semibold text-gray-800 text-sm">
+                                Notifications
+                                @if($bellUnread > 0)
+                                <span class="ml-1 text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">{{ $bellUnread }} unread</span>
+                                @endif
+                            </span>
+                            @if($bellUnread > 0)
+                            <button onclick="bellMarkAllRead()" class="text-xs text-blue-600 hover:underline">Mark all read</button>
+                            @endif
+                        </div>
+
+                        <div class="max-h-72 overflow-y-auto divide-y divide-gray-50">
+                            @forelse($bellNotifs as $bn)
+                            @php
+                                $bd = $bn->data ?? [];
+                                $bType = $bd['type'] ?? '';
+
+                                // Opening codes are read off the notifications page itself, and the
+                                // shared-documents notice goes to the committee's document list.
+                                if ($bType === 'tender_opening_otp') {
+                                    $bUrl = Route::has($bellPrefix . '.notifications') ? route($bellPrefix . '.notifications') : '#';
+                                } elseif (in_array($bType, ['award_finalized', 'award_finalization_revoked'], true) && isset($bd['tender_id'])) {
+                                    $bUrl = route('purchase-committee.review.documents', $bd['tender_id']);
+                                } elseif ($bType === 'bid_value_recorded' && isset($bd['tender_id'])) {
+                                    $bUrl = route('purchase-committee.review.compare-bids', $bd['tender_id']);
+                                } elseif (in_array($bType, ['tender_documents_shared', 'received_documents_uploaded'], true) && isset($bd['tender_id'])) {
+                                    $bUrl = route('purchase-committee.review.documents', $bd['tender_id']);
+                                } elseif (isset($bd['tender_id']) && !isset($bd['application_id'])) {
+                                    // Not every role has a tender-show route (the committee portal does not),
+                                    // so fall back to that role's tender list rather than blowing up the bell.
+                                    $bUrl = Route::has($bellPrefix . '.tenders.show')
+                                        ? route($bellPrefix . '.tenders.show', $bd['tender_id'])
+                                        : (Route::has($bellPrefix . '.tenders.index') ? route($bellPrefix . '.tenders.index') : '#');
+                                } elseif (auth()->user()->hasRole('vendor')) {
+                                    $bUrl = isset($bd['application_id']) ? route('vendor.applications.show', $bd['application_id']) : '#';
+                                } elseif (auth()->user()->hasRole('tender-owner')) {
+                                    $bUrl = isset($bd['application_id']) ? route('tender-owner.applications.show', $bd['application_id']) : '#';
+                                } elseif (isset($bd['application_id']) && Route::has($bellPrefix . '.applications.show')) {
+                                    $bUrl = route($bellPrefix . '.applications.show', $bd['application_id']);
+                                } else {
+                                    $bUrl = '#';
+                                }
+
+                                $bIcon = match ($bType) {
+                                    'tender_opening_otp'      => ['bg-purple-100', 'fa-key text-purple-500'],
+                                    'tender_documents_shared' => ['bg-emerald-100', 'fa-folder-open text-emerald-500'],
+                                    'received_documents_uploaded' => ['bg-teal-100', 'fa-file-arrow-up text-teal-500'],
+                                    'bid_value_recorded'      => ['bg-amber-100', 'fa-indian-rupee-sign text-amber-600'],
+                                    'award_finalized'         => ['bg-slate-200', 'fa-gavel text-slate-700'],
+                                    'award_finalization_revoked' => ['bg-red-100', 'fa-rotate-left text-red-600'],
+                                    'query'                   => ['bg-orange-100', 'fa-question-circle text-orange-500'],
+                                    default                   => ['bg-blue-100', 'fa-reply text-blue-500'],
+                                };
+                            @endphp
+                            <a href="{{ $bUrl }}"
+                               class="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition {{ $bn->read_at ? '' : 'bg-blue-50/60' }}">
+                                <div class="mt-0.5 w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 {{ $bIcon[0] }}">
+                                    <i class="fas {{ $bIcon[1] }} text-xs"></i>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <p class="text-xs font-semibold text-gray-800 truncate">
+                                        {{ mb_strimwidth($bd['tender_title'] ?? 'Application Query', 0, 38, '…') }}
+                                    </p>
+                                    <p class="text-xs text-gray-500 truncate mt-0.5">
+                                        @if(!empty($bd['sender_name'])){{ $bd['sender_name'] }}: @endif{{ mb_strimwidth($bd['message_preview'] ?? '', 0, 50, '…') }}
+                                    </p>
+                                    <p class="text-xs text-gray-400 mt-0.5">{{ $bn->created_at->diffForHumans() }}</p>
+                                </div>
+                                @if(!$bn->read_at)
+                                <span class="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0 mt-1.5"></span>
+                                @endif
+                            </a>
+                            @empty
+                            <div class="py-10 text-center text-gray-400">
+                                <i class="fas fa-bell-slash text-2xl mb-2 opacity-40"></i>
+                                <p class="text-xs">No notifications yet</p>
+                            </div>
+                            @endforelse
+                        </div>
+
+                        <div class="border-t border-gray-100 px-4 py-2.5 text-center">
+                            <a href="/{{ $bellPrefix }}/notifications" class="text-xs text-blue-600 hover:underline font-medium">
+                                View all notifications
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="topbar-user">
                     <span class="topbar-user-dot"></span>
                     <span class="topbar-user-name">{{ Auth::user()->name }}</span>
@@ -698,6 +920,14 @@
     document.addEventListener('alpine:init', () => {
         // Additional Alpine initialization if needed
     });
+
+    function bellMarkAllRead() {
+        const csrf = document.querySelector('meta[name="csrf-token"]').content;
+        fetch('/my/notifications/mark-all-read', {
+            method: 'POST',
+            headers: { 'X-CSRF-TOKEN': csrf }
+        }).then(() => location.reload()).catch(() => {});
+    }
 </script>
 @stack('scripts')
 

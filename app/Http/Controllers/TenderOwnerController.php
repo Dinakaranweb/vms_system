@@ -6,6 +6,7 @@ use App\Mail\CommitteeAssignedMail;
 use App\Models\Tender;
 use App\Models\TenderApplication;
 use App\Models\User;
+use App\Traits\HasDashboardWidgets;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -14,6 +15,8 @@ use Spatie\Permission\Models\Role;
 
 class TenderOwnerController extends Controller
 {
+   use HasDashboardWidgets;
+
    public function dashboard()
     {
         $user = auth()->user();
@@ -55,13 +58,15 @@ class TenderOwnerController extends Controller
 
         $onlineCount = $user->ownedTenders()->where('tender_type', 'online')->count();
         $postalCount = $user->ownedTenders()->where('tender_type', 'postal')->count();
+        $hybridCount = $user->ownedTenders()->where('tender_type', 'hybrid')->count();
 
         $tenders = $user->ownedTenders()->withCount('applications')->latest()->paginate(10);
+        $widgetData = $this->getDashboardWidgetData();
 
         return view('tender-owner.dashboard', compact(
             'tenders', 'stats', 'appStats',
             'topTenders', 'appMonthly',
-            'onlineCount', 'postalCount'
+            'onlineCount', 'postalCount', 'hybridCount', 'widgetData'
         ));
     }
     
@@ -259,5 +264,24 @@ class TenderOwnerController extends Controller
                 'message' => 'Failed to update committee member'
             ], 500);
         }
+    }
+
+    public function notifications()
+    {
+        $notifications = auth()->user()->notifications()->latest()->paginate(20);
+        return view('tender-owner.notifications.index', compact('notifications'));
+    }
+
+    public function markNotificationRead($id)
+    {
+        $notification = auth()->user()->notifications()->find($id);
+        if ($notification) $notification->markAsRead();
+        return response()->json(['success' => true]);
+    }
+
+    public function markAllNotificationsRead()
+    {
+        auth()->user()->unreadNotifications->markAsRead();
+        return response()->json(['success' => true]);
     }
 }

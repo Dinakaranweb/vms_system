@@ -90,10 +90,12 @@
                                 <span class="text-gray-500">Deadline:</span>
                                 <span class="font-semibold text-gray-900 ml-1">{{ $tender->submission_deadline->format('d M, Y') }}</span>
                             </div>
+                            @if($tender->opening_date)
                             <div>
                                 <span class="text-gray-500">Opening Date:</span>
                                 <span class="font-semibold text-gray-900 ml-1">{{ $tender->opening_date->format('d M, Y') }}</span>
                             </div>
+                            @endif
                             <div>
                                 <span class="text-gray-500">Days Left:</span>
                                 <span class="font-semibold text-{{ $tender->getRemainingDays() <= 7 ? 'red' : 'green' }}-600 ml-1">

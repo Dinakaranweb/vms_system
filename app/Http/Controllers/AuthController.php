@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Illuminate\Auth\Events\PasswordReset;
 use App\Mail\VendorRegisteredMail;
+use App\Mail\VendorRegistrationAcknowledgementMail;
 use App\Mail\PasswordResetMail;
 
 class AuthController extends Controller
@@ -86,6 +87,19 @@ class AuthController extends Controller
 
         if ($user->hasRole('committee-member')) {
             return redirect()->route('committee.dashboard');
+        }
+
+        if ($user->hasRole('management')) {
+            return redirect()->route('management.dashboard');
+        }
+
+        if ($user->hasRole('purchase-committee')) {
+            return redirect()->route('purchase-committee.dashboard');
+        }
+
+        // Any custom role created via the Super Admin Role Builder
+        if ($user->can('view all tenders')) {
+            return redirect()->route('portal.dashboard');
         }
 
         // Default redirect if no role found
@@ -206,6 +220,13 @@ class AuthController extends Controller
                 \Log::error('Vendor registration email failed: ' . $e->getMessage());
             }
 
+            // Acknowledge the vendor's own registration
+            try {
+                Mail::to($vendor->email)->send(new VendorRegistrationAcknowledgementMail($vendor));
+            } catch (\Exception $e) {
+                \Log::error('Vendor registration acknowledgement email failed: ' . $e->getMessage());
+            }
+
             return redirect('/login')->with('success', 'Registration successful! Your application is pending admin approval. You will be notified once approved.');
 
         } catch (\Exception $e) {
@@ -275,7 +296,16 @@ class AuthController extends Controller
         if ($user->hasRole('vendor')) {
             return redirect('/vendor/dashboard');
         }
-        
+        if ($user->hasRole('management')) {
+            return redirect('/management/dashboard');
+        }
+        if ($user->hasRole('purchase-committee')) {
+            return redirect('/purchase-committee/dashboard');
+        }
+        if ($user->can('view all tenders')) {
+            return redirect('/portal/dashboard');
+        }
+
         return redirect('/login');
     }
 }

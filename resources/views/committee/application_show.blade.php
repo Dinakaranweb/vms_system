@@ -62,7 +62,9 @@
                 <div class="px-5 py-4 space-y-3">
                     <div>
                         <p class="text-xs text-gray-400">Bid Amount</p>
-                        @if($application->bid_amount !== null && $application->bid_amount > 0)
+                        @if($application->tender && !$application->tender->isBidOpen())
+                        <p class="text-sm text-gray-400 font-medium"><i class="fas fa-lock mr-1"></i>Sealed until bids are opened</p>
+                        @elseif($application->bid_amount !== null && $application->bid_amount > 0)
                         <p class="text-xl font-bold text-gray-900">₹{{ number_format($application->bid_amount, 2) }}</p>
                         @else
                         <p class="text-sm text-gray-400 font-medium">N/A</p>

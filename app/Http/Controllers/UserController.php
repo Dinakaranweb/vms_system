@@ -4,10 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use App\Models\Vendor;
+use App\Models\AuditLog;
 use App\Models\TenderApplication;
+use App\Mail\PasswordResetByAdminMail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\Models\Permission;
 
@@ -258,6 +261,40 @@ class UserController extends Controller
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => 'Failed to update user status.'], 500);
         }
+    }
+
+    /**
+     * Super Admin resets any user's password directly (no reset-link flow, no old password needed).
+     */
+    public function resetPassword(Request $request, $id)
+    {
+        if (!$this->isActorSuperAdmin()) {
+            return response()->json(['success' => false, 'message' => 'Only a Super Admin can reset another user\'s password.'], 403);
+        }
+
+        $user = User::findOrFail($id);
+
+        $request->validate([
+            'password' => 'required|min:8|confirmed',
+        ]);
+
+        $user->update(['password' => Hash::make($request->password)]);
+
+        AuditLog::log([
+            'action'            => 'password_reset',
+            'module'            => 'user',
+            'record_id'         => $user->id,
+            'record_identifier' => $user->email,
+            'description'       => "Password reset for user: {$user->name} ({$user->email}) by " . auth()->user()->name,
+        ]);
+
+        try {
+            Mail::to($user->email)->send(new PasswordResetByAdminMail($user));
+        } catch (\Exception $e) {
+            \Log::error('Password reset notification email failed: ' . $e->getMessage());
+        }
+
+        return response()->json(['success' => true, 'message' => "Password reset successfully for {$user->name}. They have been notified by email."]);
     }
 
     /**

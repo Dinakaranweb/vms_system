@@ -17,12 +17,15 @@ class TenderApplication extends Model
         'tender_id',
         'vendor_id',
         'bid_amount',
+        'bid_recorded_by',
+        'bid_recorded_at',
         'emda_paid_amount',
         'emda_reference_number',
         'technical_proposal',
         'technical_proposal_file',
         'financial_proposal',
         'financial_proposal_file',
+        'postal_quote_scan',
         'documents',
         'status',
         'evaluation_scores',
@@ -38,6 +41,7 @@ class TenderApplication extends Model
         'documents' => 'array',
         'evaluation_scores' => 'array',
         'bid_amount' => 'decimal:2',
+        'bid_recorded_at' => 'datetime',
         'emda_paid_amount' => 'decimal:2',
         'reviewed_at' => 'datetime',
         'submitted_at' => 'datetime',
@@ -81,9 +85,34 @@ class TenderApplication extends Model
         return $this->belongsTo(User::class, 'reviewed_by');
     }
 
+    public function reviewComments()
+    {
+        return $this->hasMany(ApplicationReviewComment::class, 'application_id')->orderBy('created_at');
+    }
+
     public function submitter()
     {
         return $this->belongsTo(User::class, 'submitted_by');
+    }
+
+    /**
+     * Whoever keyed in this application's bid value — only set when the price was entered by
+     * hand at the opening table rather than submitted by the vendor online.
+     */
+    public function bidRecordedBy()
+    {
+        return $this->belongsTo(User::class, 'bid_recorded_by');
+    }
+
+    /**
+     * The physical documents received in this vendor's envelope, recorded after the tender was
+     * opened. Only ever populated for postal/hybrid tenders.
+     */
+    public function receivedDocuments()
+    {
+        return $this->hasMany(ApplicationReceivedDocument::class, 'application_id')
+                    ->orderBy('received_at')
+                    ->orderBy('page_number');
     }
 
     public function contract()
@@ -94,6 +123,11 @@ class TenderApplication extends Model
     public function eligibilityAnswers()
     {
         return $this->hasMany(EligibilityAnswer::class, 'tender_application_id');
+    }
+
+    public function queries(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(\App\Models\ApplicationQuery::class, 'application_id')->orderBy('created_at');
     }
 
     // ==================== SCOPES ====================

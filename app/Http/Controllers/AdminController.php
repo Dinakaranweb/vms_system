@@ -5,11 +5,14 @@ namespace App\Http\Controllers;
 use App\Models\Tender;
 use App\Models\TenderApplication;
 use App\Models\Vendor;
+use App\Traits\HasDashboardWidgets;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class AdminController extends Controller
 {
+    use HasDashboardWidgets;
+
     public function dashboard()
     {
         $stats = [
@@ -26,6 +29,7 @@ class AdminController extends Controller
             'closed'    => Tender::where('status', 'closed')->count(),
             'online'    => Tender::where('tender_type', 'online')->count(),
             'postal'    => Tender::where('tender_type', 'postal')->count(),
+            'hybrid'    => Tender::where('tender_type', 'hybrid')->count(),
         ];
 
         $appStats = [
@@ -53,11 +57,12 @@ class AdminController extends Controller
 
         $recentTenders = Tender::withCount('applications')->latest()->take(5)->get();
         $pendingVendors = Vendor::where('status', 'pending')->latest()->paginate(10);
+        $widgetData = $this->getDashboardWidgetData();
 
         return view('admin.dashboard', compact(
             'stats', 'tenderStats', 'appStats',
             'vendorMonthly', 'appMonthly',
-            'recentTenders', 'pendingVendors'
+            'recentTenders', 'pendingVendors', 'widgetData'
         ));
     }
     
@@ -131,6 +136,25 @@ class AdminController extends Controller
         }
     }
     
+    public function notifications()
+    {
+        $notifications = auth()->user()->notifications()->latest()->paginate(20);
+        return view('admin.notifications.index', compact('notifications'));
+    }
+
+    public function markNotificationRead($id)
+    {
+        $notification = auth()->user()->notifications()->find($id);
+        if ($notification) $notification->markAsRead();
+        return response()->json(['success' => true]);
+    }
+
+    public function markAllNotificationsRead()
+    {
+        auth()->user()->unreadNotifications->markAsRead();
+        return response()->json(['success' => true]);
+    }
+
     public function bulkApprove(Request $request)
     {
         $request->validate([

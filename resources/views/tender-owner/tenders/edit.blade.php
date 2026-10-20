@@ -103,7 +103,7 @@
                                     @if($question->options)
                                     <div>
                                         <label class="block text-sm font-medium text-gray-700 mb-1">Options</label>
-                                        <p class="text-gray-500 text-sm">{{ is_array($question->options) ? implode(', ', $question->options) : $question->options }}</p>
+                                        <p class="text-gray-500 text-sm">{{ is_array($question->options) ? collect($question->options)->map(fn($o) => is_array($o) ? ($o['label'] ?? '') : (string)$o)->filter()->join(', ') : $question->options }}</p>
                                     </div>
                                     @endif
                                 </div>
@@ -142,20 +142,57 @@
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Submission Deadline *</label>
-                    <input type="date" name="submission_deadline" value="{{ old('submission_deadline', $tender->submission_deadline->format('Y-m-d')) }}" required 
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Start Date *</label>
+                    <input type="date" name="start_date" id="toEditStartDate"
+                           value="{{ old('start_date', $tender->start_date?->format('Y-m-d')) }}" required
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                           onchange="checkToEditAutoPublish()">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">End Date *</label>
+                    <input type="date" name="submission_deadline" value="{{ old('submission_deadline', $tender->submission_deadline->format('Y-m-d')) }}" required
                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
-                
+
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Opening Date *</label>
-                    <input type="date" name="opening_date" value="{{ old('opening_date', $tender->opening_date->format('Y-m-d')) }}" required 
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Opening Date <span class="text-xs text-gray-400 font-normal">(Optional)</span></label>
+                    <input type="date" name="opening_date" value="{{ old('opening_date', $tender->opening_date?->format('Y-m-d')) }}"
                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+
+                @php $toEditAP = $tender->isDraft() && ($tender->auto_publish || ($tender->start_date && $tender->start_date->isFuture())); @endphp
+                <div id="toEditAutoPublishRow" class="md:col-span-2" style="{{ $toEditAP ? '' : 'display:none;' }}padding-top:14px;border-top:1px solid #e5e7eb;margin-top:4px;">
+                    <div class="flex items-center gap-2 mb-3">
+                        <i class="fas fa-clock text-purple-600 text-sm"></i>
+                        <span class="text-sm font-semibold text-gray-800">Scheduled Publishing</span>
+                    </div>
+                    <label class="flex items-start gap-3 p-4 border-2 rounded-lg cursor-pointer bg-purple-50 transition" id="toEditAutoPublishTile"
+                           style="border-color:{{ $tender->isDraft() && $tender->auto_publish ? '#7c3aed' : '#e5e7eb' }}">
+                        <input type="checkbox" id="toEditAutoPublishChk"
+                               {{ old('auto_publish', $tender->isDraft() ? $tender->auto_publish : false) ? 'checked' : '' }}
+                               class="mt-1 w-4 h-4 flex-shrink-0" style="accent-color:#7c3aed;"
+                               onchange="onToEditAutoPublishChange(this.checked)">
+                        <div>
+                            <div class="text-sm font-semibold text-gray-900">
+                                <i class="fas fa-rocket text-purple-600 mr-1"></i>
+                                Auto-publish this tender on the Start Date
+                            </div>
+                            <div id="toEditAutoPublishBadge" class="mt-2 text-xs font-semibold text-purple-700"
+                                 style="{{ ($tender->isDraft() && $tender->auto_publish) ? '' : 'display:none;' }}">
+                                <i class="fas fa-check-circle mr-1"></i>
+                                <span id="toEditAutoPublishBadgeText">{{ $tender->show_on_university ? 'Auto-publish enabled • Show on university website' : 'Auto-publish enabled' }}</span>
+                            </div>
+                        </div>
+                    </label>
+                    <input type="hidden" name="auto_publish" id="toEditAutoPublishInput" value="{{ old('auto_publish', $tender->isDraft() ? ($tender->auto_publish ? '1' : '') : '') }}">
+                    <input type="hidden" name="show_on_university" id="toEditShowOnUniInput" value="{{ old('show_on_university', $tender->show_on_university ? '1' : '0') }}">
+                    <input type="hidden" name="university_description" id="toEditUniDescInput" value="{{ old('university_description', $tender->university_description ?? '') }}">
                 </div>
                 
                 <div class="md:col-span-2">
                     <label class="block text-sm font-medium text-gray-700 mb-2">Tender Type *</label>
-                    <div class="grid grid-cols-2 gap-4">
+                    <div class="grid grid-cols-3 gap-4">
                         <label class="flex items-center p-4 border rounded-lg cursor-pointer hover:bg-gray-50">
                             <input type="radio" name="tender_type" value="online" {{ $tender->tender_type == 'online' ? 'checked' : '' }} class="mr-3">
                             <div>
@@ -172,10 +209,18 @@
                                 <p class="text-xs text-gray-500">Vendors download forms and submit by post</p>
                             </div>
                         </label>
+                        <label class="flex items-center p-4 border rounded-lg cursor-pointer hover:bg-gray-50">
+                            <input type="radio" name="tender_type" value="hybrid" {{ $tender->tender_type == 'hybrid' ? 'checked' : '' }} class="mr-3">
+                            <div>
+                                <i class="fas fa-shuffle text-purple-600 text-xl mr-2"></i>
+                                <span class="font-medium">Hybrid Tender</span>
+                                <p class="text-xs text-gray-500">Vendors submit online and send documents by post</p>
+                            </div>
+                        </label>
                     </div>
                 </div>
                 
-                <div id="postalFields" class="md:col-span-2" style="display: {{ $tender->tender_type == 'postal' ? 'block' : 'none' }}">
+                <div id="postalFields" class="md:col-span-2" style="display: {{ in_array($tender->tender_type, ['postal', 'hybrid']) ? 'block' : 'none' }}">
                     <div class="bg-gray-50 rounded-lg p-4 mt-2 space-y-4">
                         <h4 class="font-semibold text-gray-800 mb-3">Postal Submission Details</h4>
                         <div>
@@ -421,41 +466,20 @@
                 </div>
             </div>
 
-            {{-- Email Master Toggle --}}
+            {{-- Vendor Notifications --}}
             <div class="mt-6 pt-4 border-t">
                 <h4 class="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                    <i class="fas fa-envelope text-fuchsia-600"></i> Email Notifications
-                </h4>
-                <label id="editEmailTile" class="flex items-start gap-3 p-4 border-2 rounded-lg cursor-pointer transition
-                                                  {{ old('email_notifications_enabled', $tender->email_notifications_enabled) ? 'border-fuchsia-400 bg-fuchsia-50' : 'border-gray-200' }}">
-                    <input type="checkbox" name="email_notifications_enabled" value="1"
-                           id="editEmailToggle"
-                           {{ old('email_notifications_enabled', $tender->email_notifications_enabled) ? 'checked' : '' }}
-                           class="mt-1 w-4 h-4 accent-fuchsia-600"
-                           onchange="editToggleEmailSection(this.checked)">
-                    <div>
-                        <div class="font-semibold text-gray-800 flex items-center gap-1">
-                            <i class="fas fa-envelope text-fuchsia-600 text-sm"></i> Send Email Notifications
-                        </div>
-                        <p class="text-xs text-gray-500 mt-0.5">If unchecked, no emails are triggered for this tender (publish, close, etc.)</p>
-                    </div>
-                </label>
-            </div>
-
-            {{-- Vendor Notifications --}}
-            <div class="mt-6 pt-4 border-t" id="editNotifySection"
-                 style="{{ old('email_notifications_enabled', $tender->email_notifications_enabled) ? '' : 'display:none;' }}">
-                <h4 class="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                    <i class="fas fa-bell text-cyan-600"></i> Vendor Notifications on Publish
+                    <i class="fas fa-bell text-cyan-600"></i> Vendor Notifications
                 </h4>
 
-                {{-- Master notify toggle --}}
                 <label style="display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border:1.5px solid #e2e8f0;border-radius:10px;cursor:pointer;background:#f8fafc;"
                        id="editNotifyToggleTile">
                     <input type="checkbox" name="notify_vendors_on_create" value="1" id="editNotifyToggle"
                            {{ old('notify_vendors_on_create', $tender->notify_vendors_on_create) ? 'checked' : '' }}
                            style="accent-color:#0891b2;width:16px;height:16px;flex-shrink:0;margin-top:2px;"
                            onchange="editToggleNotifyOptions(this.checked)">
+                    <input type="hidden" name="email_notifications_enabled" id="toEditEmailSync"
+                           value="{{ old('notify_vendors_on_create', $tender->notify_vendors_on_create) ? '1' : '' }}">
                     <div>
                         <div style="font-size:13.5px;font-weight:600;color:#0f172a;display:flex;align-items:center;gap:6px;">
                             <i class="fas fa-envelope" style="color:#0891b2;"></i>
@@ -596,14 +620,37 @@
         </select>
     </div>
 </div>
-            <div id="optionsField" class="mb-4" style="display: none;">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Options (comma separated)</label>
-                <input type="text" id="questionOptions" placeholder="Option 1, Option 2, Option 3" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            {{-- Options rows (for select/radio/checkbox) --}}
+            <div id="optionsField" class="mb-4" style="display:none;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                    <label class="text-sm font-semibold text-gray-700">Options</label>
+                    <span id="modalOptionsHint" class="text-xs text-gray-400"></span>
+                </div>
+                <div id="modalOptionsList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;"></div>
+                <button type="button" onclick="modalAddOption()"
+                    style="font-size:12px;padding:6px 14px;border:1.5px dashed #cbd5e1;border-radius:8px;background:transparent;color:#64748b;cursor:pointer;width:100%;display:flex;align-items:center;justify-content:center;gap:6px;">
+                    <i class="fas fa-plus-circle"></i> Add Option
+                </button>
             </div>
-            <div id="eligibleOptionsField" class="mb-4" style="display: none;">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Eligible Options <span class="text-gray-400 font-normal text-xs">(comma separated — answers that pass eligibility)</span></label>
-                <input type="text" id="eligibleOptions" placeholder="Option 1, Option 2" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
-                <p class="text-xs text-gray-400 mt-1">Vendors who answer with one of these options will pass the eligibility check.</p>
+            {{-- Eligibility condition (for text/number when determines_eligibility is checked) --}}
+            <div id="conditionField" class="mb-4" style="display:none;">
+                <label class="block text-sm font-semibold text-purple-700 mb-2">Eligibility Condition</label>
+                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                    <select id="condOperator" onchange="onModalCondOpChange()"
+                        class="px-3 py-2 border border-purple-300 rounded-lg text-sm">
+                        <option value="any">Any answer passes</option>
+                        <option value="equals">Must equal</option>
+                        <option value="contains">Must contain</option>
+                        <option value="gte">Must be ≥</option>
+                        <option value="lte">Must be ≤</option>
+                        <option value="between">Must be between</option>
+                    </select>
+                    <input type="text" id="condValue" placeholder="value"
+                        style="display:none;padding:8px 12px;border:1.5px solid #c4b5fd;border-radius:8px;font-size:13px;width:100px;">
+                    <span id="condAnd" style="display:none;font-size:13px;color:#64748b;">and</span>
+                    <input type="text" id="condValue2" placeholder="value"
+                        style="display:none;padding:8px 12px;border:1.5px solid #c4b5fd;border-radius:8px;font-size:13px;width:100px;">
+                </div>
             </div>
             <div id="fileSizeField" class="mb-4" style="display: none;">
                 <label class="block text-sm font-medium text-gray-700 mb-2">Max File Size (KB)</label>
@@ -762,12 +809,15 @@ document.querySelectorAll('input[name="tender_type"]').forEach(radio => {
     radio.addEventListener('change', function() {
         const postalFields = document.getElementById('postalFields');
         if (postalFields) {
-            postalFields.style.display = this.value === 'postal' ? 'block' : 'none';
+            /* Hybrid still collects physical documents, so it needs the postal details too. */
+            postalFields.style.display = (this.value === 'postal' || this.value === 'hybrid') ? 'block' : 'none';
         }
     });
 });
 
 // ==================== ELIGIBILITY QUESTIONS FUNCTIONS ====================
+
+let modalOptionCount = 0;
 
 function addEligibilityQuestion() {
     document.getElementById('eligibilityModalTitle').innerText = 'Add Eligibility Question';
@@ -775,10 +825,12 @@ function addEligibilityQuestion() {
     document.getElementById('questionText').value = '';
     document.getElementById('questionDescription').value = '';
     document.getElementById('fieldType').value = 'text';
-    document.getElementById('isRequired').checked = true;
-    document.getElementById('questionOptions').value = '';
-    document.getElementById('eligibleOptions').value = '';
+    document.getElementById('isRequired').value = '1';
+    document.getElementById('determinesEligibility').value = '0';
     document.getElementById('maxFileSize').value = '5120';
+    document.getElementById('modalOptionsList').innerHTML = '';
+    document.getElementById('condOperator').value = 'any';
+    modalOptionCount = 0;
     toggleOptionsFields();
     document.getElementById('eligibilityModal').style.display = 'flex';
 }
@@ -788,22 +840,38 @@ function editEligibilityQuestion(questionId) {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
+                const q = data.question;
                 document.getElementById('eligibilityModalTitle').innerText = 'Edit Eligibility Question';
                 document.getElementById('editingQuestionId').value = questionId;
-                document.getElementById('questionText').value = data.question.question;
-                document.getElementById('questionDescription').value = data.question.description || '';
-                document.getElementById('fieldType').value = data.question.field_type;
-                document.getElementById('isRequired').value = data.question.is_required ? '1' : '0';
-                document.getElementById('determinesEligibility').value = data.question.determines_eligibility ? '1' : '0';
-                document.getElementById('questionOptions').value = data.question.options ? (Array.isArray(data.question.options) ? data.question.options.join(', ') : data.question.options) : '';
-                document.getElementById('eligibleOptions').value = data.question.eligible_options ? (Array.isArray(data.question.eligible_options) ? data.question.eligible_options.join(', ') : data.question.eligible_options) : '';
-                document.getElementById('maxFileSize').value = data.question.max_size || 5120;
+                document.getElementById('questionText').value = q.question;
+                document.getElementById('questionDescription').value = q.description || '';
+                document.getElementById('fieldType').value = q.field_type;
+                document.getElementById('isRequired').value = q.is_required ? '1' : '0';
+                document.getElementById('determinesEligibility').value = q.determines_eligibility ? '1' : '0';
+                document.getElementById('maxFileSize').value = q.max_size || 5120;
+
+                document.getElementById('modalOptionsList').innerHTML = '';
+                modalOptionCount = 0;
+                const opts = q.options || [];
+                if (Array.isArray(opts) && opts.length > 0) {
+                    opts.forEach(opt => {
+                        const label = typeof opt === 'string' ? opt : (opt.label || '');
+                        const eligible = typeof opt === 'object' ? !!(opt.eligible) : false;
+                        modalAddOptionRow(label, eligible);
+                    });
+                }
+
+                const cond = q.eligibility_condition || {};
+                document.getElementById('condOperator').value = cond.operator || 'any';
+                document.getElementById('condValue').value  = cond.value  || '';
+                document.getElementById('condValue2').value = cond.value2 || '';
+
                 toggleOptionsFields();
+                onModalCondOpChange();
                 document.getElementById('eligibilityModal').style.display = 'flex';
             }
         });
 }
-
 
 function removeEligibilityQuestion(questionId) {
     if (confirm('Are you sure you want to remove this eligibility question?')) {
@@ -815,47 +883,119 @@ function removeEligibilityQuestion(questionId) {
 
 function toggleOptionsFields() {
     const fieldType = document.getElementById('fieldType').value;
-    const optionsField = document.getElementById('optionsField');
-    const fileSizeField = document.getElementById('fileSizeField');
-    const eligibleOptionsField = document.getElementById('eligibleOptionsField');
-    const determinesEligibility = document.getElementById('determinesEligibility');
+    const isOptionType = ['select','radio','checkbox'].includes(fieldType);
+    const isTextNum    = ['text','number'].includes(fieldType);
+    const deEl = document.getElementById('determinesEligibility');
+    const deChecked = deEl ? deEl.value === '1' : false;
 
-    const hasOptions = (fieldType === 'select' || fieldType === 'radio' || fieldType === 'checkbox');
-    optionsField.style.display = hasOptions ? 'block' : 'none';
-    fileSizeField.style.display = fieldType === 'file' ? 'block' : 'none';
+    document.getElementById('optionsField').style.display = isOptionType ? 'block' : 'none';
+    document.getElementById('fileSizeField').style.display = fieldType === 'file' ? 'block' : 'none';
+    document.getElementById('conditionField').style.display = (isTextNum && deChecked) ? 'block' : 'none';
 
-    if (determinesEligibility) {
-        // Disable determines_eligibility select when field type is not option-based
-        const opts = determinesEligibility.querySelectorAll ? null : null;
-        if (!hasOptions) {
-            determinesEligibility.value = '0';
-        }
-        determinesEligibility.disabled = !hasOptions;
-        determinesEligibility.closest('div').style.opacity = hasOptions ? '1' : '0.4';
+    const hint = document.getElementById('modalOptionsHint');
+    if (hint) {
+        hint.textContent = fieldType === 'checkbox'
+            ? 'Mark "Required" = vendor MUST tick this option to pass eligibility'
+            : 'Mark "Eligible" = selecting this option passes eligibility';
     }
+    if (isTextNum) { updateModalCondOperators(fieldType); }
+    if (isOptionType && document.getElementById('modalOptionsList').children.length === 0) { modalAddOption(); }
+}
 
-    eligibleOptionsField.style.display = (hasOptions && determinesEligibility && determinesEligibility.value === '1') ? 'block' : 'none';
+function updateModalCondOperators(type) {
+    const sel = document.getElementById('condOperator');
+    if (!sel) return;
+    const numOnly = ['gte','lte','between'];
+    Array.from(sel.options).forEach(opt => {
+        if (type === 'text' && numOnly.includes(opt.value)) {
+            opt.style.display = 'none';
+            if (opt.selected) sel.value = 'any';
+        } else { opt.style.display = ''; }
+    });
+    onModalCondOpChange();
+}
+
+function onModalCondOpChange() {
+    const op = document.getElementById('condOperator').value;
+    const val  = document.getElementById('condValue');
+    const and  = document.getElementById('condAnd');
+    const val2 = document.getElementById('condValue2');
+    const showVal  = op && op !== 'any';
+    const showVal2 = op === 'between';
+    val.style.display  = showVal  ? '' : 'none';
+    and.style.display  = showVal2 ? '' : 'none';
+    val2.style.display = showVal2 ? '' : 'none';
+}
+
+function modalAddOption() {
+    const type = document.getElementById('fieldType').value;
+    modalAddOptionRow('', false, type);
+}
+
+function modalAddOptionRow(labelVal, eligibleVal, type) {
+    if (!type) type = document.getElementById('fieldType').value;
+    const eligLabel = type === 'checkbox' ? 'Required' : 'Eligible';
+    const oi = modalOptionCount++;
+    const list = document.getElementById('modalOptionsList');
+    const row = document.createElement('div');
+    row.id = 'mOpt_' + oi;
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;';
+    row.innerHTML = `
+        <i class="fas fa-grip-vertical" style="color:#cbd5e1;font-size:12px;"></i>
+        <input type="text" class="modal-opt-label" value="${escapeHtml(labelVal)}" placeholder="Option text…"
+               style="flex:1;border:1.5px solid #e2e8f0;border-radius:6px;padding:6px 10px;font-size:13px;outline:none;">
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:#475569;white-space:nowrap;cursor:pointer;">
+            <input type="checkbox" class="modal-opt-eligible" value="1" ${eligibleVal ? 'checked' : ''}
+                   style="accent-color:#16a34a;width:14px;height:14px;">
+            ${eligLabel}
+        </label>
+        <button type="button" onclick="document.getElementById('mOpt_${oi}').remove()"
+                style="width:24px;height:24px;border-radius:50%;background:#fee2e2;border:none;color:#dc2626;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;">
+            <i class="fas fa-times"></i>
+        </button>`;
+    list.appendChild(row);
 }
 
 function saveEligibilityQuestion() {
-    const questionText = document.getElementById('questionText').value;
-    if (!questionText) {
-        alert('Please enter a question');
-        return;
-    }
-    
+    const questionText = document.getElementById('questionText').value.trim();
+    if (!questionText) { alert('Please enter a question'); return; }
+
     const editingId = document.getElementById('editingQuestionId').value;
+    const fieldType = document.getElementById('fieldType').value;
+    const isOptionType = ['select','radio','checkbox'].includes(fieldType);
+    const isTextNum    = ['text','number'].includes(fieldType);
+    const determinesElig = document.getElementById('determinesEligibility').value === '1';
+
+    const options = [];
+    document.querySelectorAll('#modalOptionsList > div').forEach(row => {
+        const labelEl = row.querySelector('.modal-opt-label');
+        const eligEl  = row.querySelector('.modal-opt-eligible');
+        if (labelEl && labelEl.value.trim()) {
+            options.push({ label: labelEl.value.trim(), eligible: eligEl ? eligEl.checked : false });
+        }
+    });
+
+    let eligibility_condition = null;
+    if (isTextNum && determinesElig) {
+        const op = document.getElementById('condOperator').value;
+        eligibility_condition = {
+            operator: op,
+            value:  document.getElementById('condValue').value  || null,
+            value2: document.getElementById('condValue2').value || null,
+        };
+    }
+
     const questionData = {
-        question: questionText,
-        description: document.getElementById('questionDescription').value,
-        field_type: document.getElementById('fieldType').value,
-        is_required: document.getElementById('isRequired').value === '1',
-        determines_eligibility: document.getElementById('determinesEligibility').value === '1',
-        options: document.getElementById('questionOptions').value,
-        eligible_options: document.getElementById('eligibleOptions').value,
-        max_size: document.getElementById('maxFileSize').value
+        question:               questionText,
+        description:            document.getElementById('questionDescription').value,
+        field_type:             fieldType,
+        is_required:            document.getElementById('isRequired').value === '1',
+        determines_eligibility: determinesElig,
+        options:                isOptionType ? options : null,
+        eligibility_condition:  eligibility_condition,
+        max_size:               document.getElementById('maxFileSize').value
     };
-    
+
     if (editingId) {
         fetch(`/admin/tenders/questions/${editingId}`, {
             method: 'PUT',
@@ -877,48 +1017,56 @@ function saveEligibilityQuestion() {
         const index = Date.now();
         const div = document.createElement('div');
         div.className = 'new-question-item bg-gray-50 rounded-lg p-4 mb-4 border border-green-200';
+
+        let optionHiddens = '';
+        if (isOptionType && options.length > 0) {
+            options.forEach((opt, oi) => {
+                optionHiddens += `<input type="hidden" name="new_questions[${index}][options][${oi}][label]" value="${escapeHtml(opt.label)}">`;
+                if (opt.eligible) {
+                    optionHiddens += `<input type="hidden" name="new_questions[${index}][options][${oi}][eligible]" value="1">`;
+                }
+            });
+        }
+
+        let condHiddens = '';
+        if (eligibility_condition) {
+            condHiddens += `<input type="hidden" name="new_questions[${index}][eligibility_condition][operator]" value="${escapeHtml(eligibility_condition.operator || '')}">`;
+            if (eligibility_condition.value)  condHiddens += `<input type="hidden" name="new_questions[${index}][eligibility_condition][value]"  value="${escapeHtml(eligibility_condition.value)}">`;
+            if (eligibility_condition.value2) condHiddens += `<input type="hidden" name="new_questions[${index}][eligibility_condition][value2]" value="${escapeHtml(eligibility_condition.value2)}">`;
+        }
+
         div.innerHTML = `
             <input type="hidden" name="new_questions[${index}][question]" value="${escapeHtml(questionData.question)}">
             <input type="hidden" name="new_questions[${index}][description]" value="${escapeHtml(questionData.description)}">
             <input type="hidden" name="new_questions[${index}][field_type]" value="${questionData.field_type}">
             <input type="hidden" name="new_questions[${index}][is_required]" value="${questionData.is_required ? 1 : 0}">
             <input type="hidden" name="new_questions[${index}][determines_eligibility]" value="${questionData.determines_eligibility ? 1 : 0}">
-            <input type="hidden" name="new_questions[${index}][options]" value="${escapeHtml(questionData.options)}">
-            <input type="hidden" name="new_questions[${index}][eligible_options]" value="${escapeHtml(questionData.eligible_options)}">
             <input type="hidden" name="new_questions[${index}][max_size]" value="${questionData.max_size}">
+            ${optionHiddens}
+            ${condHiddens}
             <div class="flex justify-between items-center mb-3">
                 <h5 class="font-semibold text-gray-800">New Question</h5>
                 <button type="button" onclick="this.closest('.new-question-item').remove()" class="text-red-600 hover:text-red-800">
                     <i class="fas fa-trash"></i>
                 </button>
             </div>
-            <div class="grid grid-cols-1 gap-3">
-                <div><label class="block text-sm font-medium text-gray-700 mb-1">Question</label><p class="text-gray-900">${escapeHtml(questionData.question)}</p></div>
-                ${questionData.description ? `<div><label class="block text-sm font-medium text-gray-700 mb-1">Description</label><p class="text-gray-500 text-sm">${escapeHtml(questionData.description)}</p></div>` : ''}
-                <div class="grid grid-cols-3 gap-3">
-                    <div><label class="block text-sm font-medium text-gray-700 mb-1">Field Type</label><p class="text-gray-900">${getFieldTypeLabel(questionData.field_type)}</p></div>
-                    <div><label class="block text-sm font-medium text-gray-700 mb-1">Required</label><p class="text-gray-900">${questionData.is_required ? 'Yes' : 'No'}</p></div>
-                    <div><label class="block text-sm font-medium text-gray-700 mb-1">Determines Eligibility</label><p class="text-gray-900">${questionData.determines_eligibility ? 'Yes' : 'No'}</p></div>
-                </div>
-                ${questionData.options ? `<div><label class="block text-sm font-medium text-gray-700 mb-1">Options</label><p class="text-gray-500 text-sm">${escapeHtml(questionData.options)}</p></div>` : ''}
+            <div>
+                <p class="text-gray-900 font-medium">${escapeHtml(questionData.question)}</p>
+                <p class="text-sm text-gray-500 mt-1">Type: ${getFieldTypeLabel(questionData.field_type)}</p>
+                ${(isOptionType && options.length) ? `<p class="text-sm text-gray-500 mt-1">Options: ${options.map(o=>escapeHtml(o.label)).join(', ')}</p>` : ''}
             </div>
         `;
         container.appendChild(div);
     }
-    
+
     closeEligibilityModal();
 }
 
 function getFieldTypeLabel(fieldType) {
     const labels = {
-        'text': 'Short Text',
-        'textarea': 'Paragraph Text',
-        'select': 'Dropdown Select',
-        'radio': 'Radio Buttons',
-        'checkbox': 'Checkboxes',
-        'number': 'Number',
-        'date': 'Date',
-        'file': 'File Upload'
+        'text': 'Short Text', 'number': 'Number',
+        'select': 'Dropdown (Select)', 'radio': 'Radio (Single Choice)',
+        'checkbox': 'Checkbox (Multi Choice)', 'file': 'File Upload'
     };
     return labels[fieldType] || fieldType;
 }
@@ -968,24 +1116,13 @@ function updateOwnerEditPrivateIds() {
     document.getElementById('ownerEditPrivateInput').value = ids.join(',');
 }
 
-// ── Email notifications master toggle ──
-function editToggleEmailSection(enabled) {
-    const tile    = document.getElementById('editEmailTile');
-    const section = document.getElementById('editNotifySection');
-    tile.style.borderColor   = enabled ? '#e879f9' : '';
-    tile.style.backgroundColor = enabled ? '#fdf4ff' : '';
-    section.style.display = enabled ? '' : 'none';
-    if (!enabled) {
-        const toggle = document.getElementById('editNotifyToggle');
-        if (toggle) { toggle.checked = false; editToggleNotifyOptions(false); }
-    }
-}
-
 // ── Vendor-notify section toggle ──
 function editToggleNotifyOptions(show) {
     document.getElementById('editNotifyOptions').style.display = show ? '' : 'none';
     const tile = document.getElementById('editNotifyToggleTile');
     if (tile) tile.style.borderColor = show ? '#0891b2' : '#e2e8f0';
+    const sync = document.getElementById('toEditEmailSync');
+    if (sync) sync.value = show ? '1' : '';
 }
 
 // ── Show/hide specific-vendor picker ──
@@ -1032,8 +1169,108 @@ function updateEditNotifyIds() {
 
 // ── Init on page load ──
 document.addEventListener('DOMContentLoaded', function () {
-    editToggleEmailSection(document.getElementById('editEmailToggle').checked);
     editToggleNotifyOptions(document.getElementById('editNotifyToggle')?.checked ?? false);
 });
+
+/* ── Auto-publish (tender-owner edit) ── */
+const _toEditIstToday = "{{ \Carbon\Carbon::now('Asia/Kolkata')->toDateString() }}";
+
+function checkToEditAutoPublish() {
+    const d = document.getElementById('toEditStartDate').value;
+    const row = document.getElementById('toEditAutoPublishRow');
+    if (d && d > _toEditIstToday) {
+        row.style.display = '';
+    } else {
+        row.style.display = 'none';
+        document.getElementById('toEditAutoPublishChk').checked = false;
+        document.getElementById('toEditAutoPublishInput').value = '';
+        document.getElementById('toEditAutoPublishBadge').style.display = 'none';
+        document.getElementById('toEditAutoPublishTile').style.borderColor = '#e5e7eb';
+    }
+}
+
+function onToEditAutoPublishChange(checked) {
+    if (checked) {
+        const showUni = document.getElementById('toEditShowOnUniInput').value === '1';
+        document.getElementById('toEditApModalUniChk').checked = showUni;
+        document.getElementById('toEditApModalDescWrap').style.display = showUni ? '' : 'none';
+        document.getElementById('toEditApModalDesc').value = document.getElementById('toEditUniDescInput').value;
+        document.getElementById('toEditAutoPublishModal').style.display = 'flex';
+    } else {
+        document.getElementById('toEditAutoPublishInput').value = '';
+        document.getElementById('toEditShowOnUniInput').value = '0';
+        document.getElementById('toEditUniDescInput').value = '';
+        document.getElementById('toEditAutoPublishBadge').style.display = 'none';
+        document.getElementById('toEditAutoPublishTile').style.borderColor = '#e5e7eb';
+    }
+}
+
+function confirmToEditAutoPublishModal() {
+    const showUni = document.getElementById('toEditApModalUniChk').checked;
+    const desc = document.getElementById('toEditApModalDesc').value.trim();
+    document.getElementById('toEditAutoPublishInput').value = '1';
+    document.getElementById('toEditShowOnUniInput').value = showUni ? '1' : '0';
+    document.getElementById('toEditUniDescInput').value = desc;
+    document.getElementById('toEditAutoPublishModal').style.display = 'none';
+    const badgeTxt = document.getElementById('toEditAutoPublishBadgeText');
+    if (badgeTxt) badgeTxt.textContent = showUni ? 'Auto-publish enabled • Show on university website' : 'Auto-publish enabled';
+    document.getElementById('toEditAutoPublishBadge').style.display = '';
+    document.getElementById('toEditAutoPublishTile').style.borderColor = '#7c3aed';
+}
+
+function cancelToEditAutoPublishModal() {
+    document.getElementById('toEditAutoPublishChk').checked = false;
+    document.getElementById('toEditAutoPublishInput').value = '';
+    document.getElementById('toEditShowOnUniInput').value = '0';
+    document.getElementById('toEditUniDescInput').value = '';
+    document.getElementById('toEditAutoPublishModal').style.display = 'none';
+    document.getElementById('toEditAutoPublishBadge').style.display = 'none';
+    document.getElementById('toEditAutoPublishTile').style.borderColor = '#e5e7eb';
+}
 </script>
+
+{{-- ── Auto-Publish Modal (tender-owner edit) ── --}}
+<div id="toEditAutoPublishModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:14px;max-width:520px;width:90%;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.25);">
+        <div style="background:linear-gradient(135deg,#7c3aed,#4f46e5);padding:20px 24px;display:flex;align-items:center;justify-content:space-between;">
+            <span style="color:#fff;font-size:16px;font-weight:700;display:flex;align-items:center;gap:8px;">
+                <i class="fas fa-rocket"></i> Auto-Publish Settings
+            </span>
+            <button type="button" onclick="cancelToEditAutoPublishModal()" style="background:none;border:none;color:rgba(255,255,255,.8);font-size:18px;cursor:pointer;line-height:1;">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div style="padding:24px;">
+            <p style="font-size:13.5px;color:#475569;margin:0 0 20px;">This tender will be automatically published on the selected start date. Configure university website display below.</p>
+            <div style="border:1.5px solid #e2e8f0;border-radius:10px;padding:16px;background:#f8fafc;margin-bottom:20px;">
+                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+                    <input type="checkbox" id="toEditApModalUniChk"
+                           style="width:17px;height:17px;accent-color:#2563eb;flex-shrink:0;"
+                           onchange="document.getElementById('toEditApModalDescWrap').style.display=this.checked?'':'none'">
+                    <div>
+                        <span style="font-size:13.5px;font-weight:600;color:#1e293b;">Show on University Website</span>
+                        <p style="font-size:12px;color:#64748b;margin:2px 0 0;">Tick to display this tender on the university portal via API.</p>
+                    </div>
+                </label>
+                <div id="toEditApModalDescWrap" style="display:none;margin-top:14px;">
+                    <label style="font-size:12px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px;">University Description</label>
+                    <textarea id="toEditApModalDesc" rows="4"
+                              style="width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:9px 12px;font-size:13.5px;font-family:inherit;resize:vertical;outline:none;box-sizing:border-box;"
+                              onfocus="this.style.borderColor='#93c5fd'" onblur="this.style.borderColor='#e2e8f0'"
+                              placeholder="Brief description for the university website…"></textarea>
+                </div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:10px;">
+                <button type="button" onclick="cancelToEditAutoPublishModal()"
+                        style="font-size:13.5px;font-weight:500;padding:9px 20px;border:1.5px solid #e2e8f0;border-radius:8px;background:#fff;color:#475569;cursor:pointer;">
+                    Cancel
+                </button>
+                <button type="button" onclick="confirmToEditAutoPublishModal()"
+                        style="font-size:14px;font-weight:700;padding:10px 26px;border:none;border-radius:8px;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;cursor:pointer;display:inline-flex;align-items:center;gap:8px;">
+                    <i class="fas fa-check"></i> Confirm
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 @endsection

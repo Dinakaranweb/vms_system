@@ -243,4 +243,8 @@
     </div>
 </div>
 
+<div class="max-w-7xl mx-auto mt-6">
+    @include('partials.dashboard-widgets', ['widgetData' => $widgetData, 'hideEmptyState' => true])
+</div>
+
 @endsection

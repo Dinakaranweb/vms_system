@@ -334,7 +334,7 @@ window.viewVendor = function(id) {
     modal.style.display = 'flex';
     detailsDiv.innerHTML = '<div class="text-center py-10"><i class="fas fa-spinner fa-spin text-3xl text-blue-500"></i><p class="mt-3 text-gray-400 text-sm">Loading vendor details...</p></div>';
 
-    const role = window.location.pathname.split('/')[1];
+    const role = '{{ auth()->user()->hasRole("super-admin") ? "super-admin" : "admin" }}';
     fetch(`/${role}/vendors/${id}`, {
         headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
     })
@@ -573,7 +573,7 @@ window.closeApproveModal = function() {
 window.confirmApprove = function() {
     if (!currentApproveId) return;
     
-    const role = window.location.pathname.split('/')[1];
+    const role = '{{ auth()->user()->hasRole("super-admin") ? "super-admin" : "admin" }}';
     fetch(`/${role}/vendors/${currentApproveId}/approve`, {
         method: 'POST',
         headers: {
@@ -621,7 +621,7 @@ window.confirmReject = function() {
     
     if (!currentRejectId) return;
     
-    const role = window.location.pathname.split('/')[1];
+    const role = '{{ auth()->user()->hasRole("super-admin") ? "super-admin" : "admin" }}';
     fetch(`/${role}/vendors/${currentRejectId}/reject`, {
         method: 'POST',
         headers: {
@@ -663,7 +663,7 @@ window.closeDeleteModal = function() {
 window.confirmDelete = function() {
     if (!currentDeleteId) return;
     
-    const role = window.location.pathname.split('/')[1];
+    const role = '{{ auth()->user()->hasRole("super-admin") ? "super-admin" : "admin" }}';
     fetch(`/${role}/vendors/${currentDeleteId}`, {
         method: 'DELETE',
         headers: {
@@ -750,7 +750,7 @@ window.showCategoriesModal = function(id, name) {
     document.getElementById('categoriesListWrap').classList.add('hidden');
     document.getElementById('categoriesModal').style.display = 'flex';
 
-    const role = window.location.pathname.split('/')[1];
+    const role = '{{ auth()->user()->hasRole("super-admin") ? "super-admin" : "admin" }}';
     fetch(`/${role}/vendors/${id}`, {
         headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
     })
@@ -810,7 +810,7 @@ window.confirmUpdateCategories = function() {
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Saving...';
 
-    const role = window.location.pathname.split('/')[1];
+    const role = '{{ auth()->user()->hasRole("super-admin") ? "super-admin" : "admin" }}';
     fetch(`/${role}/vendors/${currentCategoriesVendorId}/categories`, {
         method: 'POST',
         headers: {

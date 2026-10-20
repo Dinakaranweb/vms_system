@@ -91,7 +91,7 @@ table.to-table tbody td:last-child{ padding-right:24px; }
         <div>
             <div class="stat-lbl">My Tenders</div>
             <div class="stat-val">{{ $stats['total'] }}</div>
-            <div class="stat-sub">{{ $onlineCount }} online · {{ $postalCount }} postal</div>
+            <div class="stat-sub">{{ $onlineCount }} online · {{ $postalCount }} postal · {{ $hybridCount }} hybrid</div>
         </div>
     </div>
     <div class="stat-card sc-green">
@@ -221,6 +221,7 @@ table.to-table tbody td:last-child{ padding-right:24px; }
             <div style="display:flex;flex-direction:column;gap:10px;flex:1;">
                 <div class="legend-row"><span class="legend-dot" style="background:#60a5fa;"></span> Online <span style="margin-left:auto;font-weight:700;font-size:14px;">{{ $onlineCount }}</span></div>
                 <div class="legend-row"><span class="legend-dot" style="background:#fbbf24;"></span> Postal <span style="margin-left:auto;font-weight:700;font-size:14px;">{{ $postalCount }}</span></div>
+                <div class="legend-row"><span class="legend-dot" style="background:#a78bfa;"></span> Hybrid <span style="margin-left:auto;font-weight:700;font-size:14px;">{{ $hybridCount }}</span></div>
                 <div style="border-top:1px solid #f1f5f9;padding-top:10px;margin-top:2px;">
                     <div class="legend-row" style="font-weight:600;"><span>Total</span><span style="margin-left:auto;font-size:15px;font-weight:800;">{{ $stats['total'] }}</span></div>
                 </div>
@@ -312,6 +313,10 @@ table.to-table tbody td:last-child{ padding-right:24px; }
     </div>
 </div>
 
+<div class="mt-6">
+    @include('partials.dashboard-widgets', ['widgetData' => $widgetData, 'hideEmptyState' => true])
+</div>
+
 </div>{{-- /.to-wrap --}}
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -398,10 +403,10 @@ new Chart(document.getElementById('tenderStatusDonut'), {
 new Chart(document.getElementById('tenderTypeDonut'), {
     type: 'doughnut',
     data: {
-        labels: ['Online', 'Postal'],
+        labels: ['Online', 'Postal', 'Hybrid'],
         datasets: [{
-            data: [{{ $onlineCount }}, {{ $postalCount }}],
-            backgroundColor: ['#60a5fa','#fbbf24'],
+            data: [{{ $onlineCount }}, {{ $postalCount }}, {{ $hybridCount }}],
+            backgroundColor: ['#60a5fa','#fbbf24','#a78bfa'],
             borderWidth: 3, borderColor: '#fff', hoverOffset: 6,
         }]
     },

@@ -164,6 +164,7 @@ class AuditLog extends Model
             'reject' => 'danger',
             'login' => 'info',
             'logout' => 'warning',
+            'password_reset' => 'warning',
         ];
         
         return $colors[$this->action] ?? 'secondary';

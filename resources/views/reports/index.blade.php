@@ -124,6 +124,10 @@
             Tender Applications &amp; Work Orders
             <span class="bg-white/20 text-white text-xs px-2 py-0.5 rounded-full">{{ $contracts->total() }} records</span>
         </h3>
+        <button onclick="window.print()"
+                class="no-print inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-medium rounded-lg transition">
+            <i class="fas fa-print"></i> Print
+        </button>
     </div>
 
     <div class="overflow-x-auto">
@@ -146,6 +150,7 @@
                     <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">Supplier Ref</th>
                     <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">Status</th>
                     <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">Flags</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">Queries</th>
                     <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">Action</th>
                 </tr>
             </thead>
@@ -161,7 +166,9 @@
                         'terminated' => 'bg-orange-100 text-orange-800',
                         'completed'  => 'bg-blue-100 text-blue-800',
                     ];
-                    $sc = $statusColors[$c->status] ?? 'bg-gray-100 text-gray-800';
+                    $sc      = $statusColors[$c->status] ?? 'bg-gray-100 text-gray-800';
+                    $queries = $c->application ? $c->application->queries : collect([]);
+                    $qCount  = $queries->count();
                 @endphp
                 <tr class="hover:bg-blue-50/30 transition">
                     <td class="px-4 py-3 text-gray-400 text-xs">{{ $contracts->firstItem() + $i }}</td>
@@ -225,6 +232,16 @@
                         </div>
                     </td>
                     <td class="px-4 py-3 whitespace-nowrap">
+                        @if($qCount > 0)
+                        <button onclick="toggleQueries('q{{ $c->id }}')"
+                                class="query-toggle-btn inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-semibold hover:bg-purple-200 transition">
+                            <i class="fas fa-comments text-xs"></i> {{ $qCount }}
+                        </button>
+                        @else
+                        <span class="text-gray-300 text-xs">—</span>
+                        @endif
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap">
                         @if($rp === 'tender-owner')
                         <a href="{{ route('tender-owner.contracts.show', $c->id) }}"
                            class="text-blue-600 hover:text-blue-800 text-xs flex items-center gap-1">
@@ -238,9 +255,71 @@
                         @endif
                     </td>
                 </tr>
+                @if($qCount > 0)
+                <tr id="q{{ $c->id }}" class="query-expand-row" style="display:none;">
+                    <td colspan="18" class="px-6 pb-5 pt-0">
+                        <div class="border border-purple-200 rounded-lg overflow-hidden mt-1">
+                            <div class="px-4 py-2 bg-purple-50 border-b border-purple-200 flex items-center justify-between">
+                                <h4 class="text-xs font-bold text-purple-700 uppercase tracking-wide">
+                                    <i class="fas fa-comments mr-1"></i> Query Thread — {{ $qCount }} message{{ $qCount !== 1 ? 's' : '' }}
+                                </h4>
+                                <span class="text-xs text-gray-500">App: {{ $appNo }}</span>
+                            </div>
+                            <div class="p-4 space-y-3 bg-white">
+                                @foreach($queries as $q)
+                                @php
+                                    $sr = $q->sender_role ?? 'unknown';
+                                    $rcMap = [
+                                        'admin'        => 'bg-red-50 border-red-200',
+                                        'super-admin'  => 'bg-red-50 border-red-200',
+                                        'tender-owner' => 'bg-purple-50 border-purple-200',
+                                        'vendor'       => 'bg-green-50 border-green-200',
+                                    ];
+                                    $badgeMap = [
+                                        'admin'        => 'bg-red-100 text-red-700',
+                                        'super-admin'  => 'bg-red-100 text-red-700',
+                                        'tender-owner' => 'bg-purple-100 text-purple-700',
+                                        'vendor'       => 'bg-green-100 text-green-700',
+                                    ];
+                                    $rc = $rcMap[$sr] ?? 'bg-gray-50 border-gray-200';
+                                    $bc = $badgeMap[$sr] ?? 'bg-gray-100 text-gray-700';
+                                @endphp
+                                <div class="border rounded-lg {{ $rc }} overflow-hidden">
+                                    <div class="px-3 py-2 flex items-center justify-between border-b border-current/10 bg-white/60">
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-xs font-semibold text-gray-800">{{ $q->sender->name ?? 'Unknown' }}</span>
+                                            <span class="px-2 py-0.5 rounded-full text-xs font-medium {{ $bc }}">
+                                                {{ ucfirst($sr === 'super-admin' ? 'admin' : str_replace('-', ' ', $sr)) }}
+                                            </span>
+                                        </div>
+                                        <span class="text-xs text-gray-400">{{ $q->created_at->format('d M Y, H:i') }}</span>
+                                    </div>
+                                    <div class="px-3 py-2 text-sm text-gray-700 prose prose-sm max-w-none" style="white-space: pre-wrap;">
+                                        {{ $q->message }}
+                                    </div>
+                                    @if($q->attachment_path)
+                                    <div class="px-3 py-2 bg-gray-50 border-t border-gray-100 flex items-center gap-2">
+                                        <i class="fas fa-paperclip text-gray-400 text-xs"></i>
+                                        <a href="{{ Storage::url($q->attachment_path) }}" target="_blank"
+                                           class="text-xs text-blue-600 hover:underline font-medium">
+                                            {{ $q->attachment_name ?? 'Attachment' }}
+                                        </a>
+                                        <a href="{{ Storage::url($q->attachment_path) }}" download="{{ $q->attachment_name ?? 'attachment' }}"
+                                           class="text-xs text-gray-400 hover:text-gray-600">
+                                            <i class="fas fa-download"></i>
+                                        </a>
+                                    </div>
+                                    @endif
+                                </div>
+                                @endforeach
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                @endif
                 @empty
                 <tr>
-                    <td colspan="17" class="px-6 py-16 text-center text-gray-400">
+                    <td colspan="18" class="px-6 py-16 text-center text-gray-400">
                         <i class="fas fa-inbox text-4xl mb-3 block"></i>
                         No records found for the selected filters.
                     </td>
@@ -263,11 +342,22 @@
 @push('styles')
 <style>
 @media print {
-    .nav-sidebar, header, .topbar, form, .pagination, [title="Print"] { display:none !important; }
+    .no-print, .nav-sidebar, header, .topbar, form, .pagination { display:none !important; }
     body { font-size:11px; }
     #reportTable th, #reportTable td { padding:4px 6px !important; font-size:10px !important; }
     .rounded-xl { border-radius:0 !important; }
     .shadow-sm { box-shadow:none !important; }
+    .query-expand-row { display:table-row !important; }
+    .query-toggle-btn { display:none !important; }
 }
 </style>
+@endpush
+
+@push('scripts')
+<script>
+function toggleQueries(id) {
+    var row = document.getElementById(id);
+    row.style.display = (row.style.display === 'none' || row.style.display === '') ? 'table-row' : 'none';
+}
+</script>
 @endpush

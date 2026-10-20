@@ -92,10 +92,12 @@
                 <div class="text-xs text-gray-500 mb-0.5">Published</div>
                 <div class="font-semibold text-gray-700 text-sm">{{ $tender->published_date?->format('d M Y') ?? '—' }}</div>
             </div>
+            @if($tender->opening_date)
             <div class="text-center">
                 <div class="text-xs text-gray-500 mb-0.5">Opening Date</div>
-                <div class="font-semibold text-gray-700 text-sm">{{ $tender->opening_date?->format('d M Y') ?? '—' }}</div>
+                <div class="font-semibold text-gray-700 text-sm">{{ $tender->opening_date->format('d M Y') }}</div>
             </div>
+            @endif
         </div>
 
         {{-- Description + Requirements --}}
@@ -128,24 +130,18 @@
             @endif
 
             @if($tender->isPostal())
-            <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-start gap-3">
-                <i class="fas fa-envelope text-yellow-600 text-lg mt-0.5"></i>
+            <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+                <i class="fas fa-lock text-amber-500 text-lg mt-0.5 flex-shrink-0"></i>
                 <div>
-                    <p class="font-semibold text-yellow-800 text-sm">Postal Submission Address</p>
-                    <p class="text-sm text-gray-700 mt-1 font-medium">{{ $tender->postal_address }}</p>
-                    @if($tender->contact_person || $tender->contact_phone || $tender->contact_email)
-                    <div class="mt-2 text-xs text-yellow-700 space-y-0.5">
-                        @if($tender->contact_person)<span class="mr-3"><i class="fas fa-user mr-1"></i>{{ $tender->contact_person }}</span>@endif
-                        @if($tender->contact_phone)<span class="mr-3"><i class="fas fa-phone mr-1"></i>{{ $tender->contact_phone }}</span>@endif
-                        @if($tender->contact_email)<span><i class="fas fa-at mr-1"></i>{{ $tender->contact_email }}</span>@endif
-                    </div>
-                    @endif
-                    @if($tender->postal_receipt_deadline)
-                    <div class="mt-2 text-xs font-semibold text-red-700 flex items-center gap-1">
-                        <i class="fas fa-calendar-times"></i>
-                        Physical documents must be received by: {{ $tender->postal_receipt_deadline->format('d M Y') }}
-                    </div>
-                    @endif
+                    <p class="font-semibold text-amber-800 text-sm">Postal Submission Address — Locked</p>
+                    <p class="text-xs text-amber-700 mt-1 leading-relaxed">
+                        The postal address and downloadable documents will be revealed
+                        @if($hasQuestions)
+                            after you pass the eligibility check below.
+                        @else
+                            in the application form below.
+                        @endif
+                    </p>
                 </div>
             </div>
             @endif
@@ -284,30 +280,33 @@
                                     class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
                                     {{ $question->is_required ? 'required' : '' }}>
                                     <option value="">-- Select an option --</option>
-                                    @foreach($question->options as $option)
-                                        <option value="{{ $option }}">{{ $option }}</option>
+                                    @foreach($question->options as $opt)
+                                        @php $optLabel = is_array($opt) ? ($opt['label'] ?? '') : (string)$opt; @endphp
+                                        <option value="{{ $optLabel }}">{{ $optLabel }}</option>
                                     @endforeach
                                 </select>
                                 @break
                             @case('radio')
                                 <div class="space-y-2 mt-1">
-                                    @foreach($question->options as $option)
+                                    @foreach($question->options as $opt)
+                                        @php $optLabel = is_array($opt) ? ($opt['label'] ?? '') : (string)$opt; @endphp
                                         <label class="flex items-center gap-2 cursor-pointer">
-                                            <input type="radio" name="eligibility_answers[{{ $question->id }}]" value="{{ $option }}"
+                                            <input type="radio" name="eligibility_answers[{{ $question->id }}]" value="{{ $optLabel }}"
                                                 class="text-purple-600 focus:ring-purple-500"
                                                 {{ $question->is_required ? 'required' : '' }}>
-                                            <span class="text-sm text-gray-700">{{ $option }}</span>
+                                            <span class="text-sm text-gray-700">{{ $optLabel }}</span>
                                         </label>
                                     @endforeach
                                 </div>
                                 @break
                             @case('checkbox')
                                 <div class="space-y-2 mt-1">
-                                    @foreach($question->options as $option)
+                                    @foreach($question->options as $opt)
+                                        @php $optLabel = is_array($opt) ? ($opt['label'] ?? '') : (string)$opt; @endphp
                                         <label class="flex items-center gap-2 cursor-pointer">
-                                            <input type="checkbox" name="eligibility_answers[{{ $question->id }}][]" value="{{ $option }}"
+                                            <input type="checkbox" name="eligibility_answers[{{ $question->id }}][]" value="{{ $optLabel }}"
                                                 class="rounded text-purple-600 focus:ring-purple-500">
-                                            <span class="text-sm text-gray-700">{{ $option }}</span>
+                                            <span class="text-sm text-gray-700">{{ $optLabel }}</span>
                                         </label>
                                     @endforeach
                                 </div>
@@ -514,18 +513,15 @@
                             <i class="fas fa-paperclip text-green-600 mr-1"></i>Supporting Documents
                             <span class="text-xs text-gray-400 font-normal ml-1">(PDF, DOC, JPG, PNG — max 10 MB each)</span>
                         </label>
-                        <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-green-400 transition">
-                            <i class="fas fa-cloud-upload-alt text-4xl text-gray-300 mb-2"></i>
-                            <p class="text-sm text-gray-600 mb-3">Click to upload documents or drag and drop</p>
-                            <input type="file" name="application_documents[]" id="docUpload" multiple
-                                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                                class="hidden" onchange="previewDocuments(this)">
-                            <button type="button" onclick="document.getElementById('docUpload').click()"
-                                class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition text-sm">
-                                <i class="fas fa-folder-open mr-1"></i>Choose Files
-                            </button>
-                        </div>
-                        <div id="docList" class="mt-3 space-y-2"></div>
+                        <div id="docInputList" class="space-y-2 mb-2"></div>
+                        <button type="button" onclick="addDocInput()"
+                            class="flex items-center gap-2 px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-500 hover:border-green-400 hover:text-green-700 hover:bg-green-50 transition w-full justify-center">
+                            <i class="fas fa-plus-circle"></i> Add Document
+                        </button>
+                        <p class="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                            <i class="fas fa-info-circle"></i>
+                            Click <strong>Add Document</strong> for each file you want to upload. Max 10 MB per file.
+                        </p>
                     </div>
                     @endif
 
@@ -625,17 +621,40 @@ function showFileName(input) {
     }
 }
 
-function previewDocuments(input) {
-    const list = document.getElementById('docList');
-    list.innerHTML = '';
-    Array.from(input.files).forEach(f => {
-        list.innerHTML += `
-            <div class="flex items-center gap-3 p-2.5 bg-gray-50 rounded-lg border border-gray-200 text-sm">
-                <i class="fas fa-file text-green-500"></i>
-                <span class="flex-1 truncate text-gray-700">${f.name}</span>
-                <span class="text-xs text-gray-400">${(f.size/1024/1024).toFixed(2)} MB</span>
-            </div>`;
-    });
+let docInputCount = 0;
+
+function addDocInput() {
+    const container = document.getElementById('docInputList');
+    const idx = docInputCount++;
+    const row = document.createElement('div');
+    row.id = 'docRow_' + idx;
+    row.className = 'flex items-center gap-2 p-2.5 bg-gray-50 rounded-lg border border-gray-200';
+    row.innerHTML = `
+        <i class="fas fa-paperclip text-green-500 flex-shrink-0 text-sm"></i>
+        <input type="file" name="application_documents[]"
+               accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+               class="flex-1 text-sm text-gray-600 file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-green-100 file:text-green-700 hover:file:bg-green-200 cursor-pointer"
+               onchange="updateDocLabel(this, ${idx})">
+        <span id="docSize_${idx}" class="text-xs text-gray-400 flex-shrink-0 hidden"></span>
+        <button type="button" onclick="removeDocRow(${idx})"
+                title="Remove"
+                class="flex-shrink-0 w-6 h-6 rounded-full bg-red-100 hover:bg-red-200 text-red-600 flex items-center justify-center transition">
+            <i class="fas fa-times text-xs"></i>
+        </button>`;
+    container.appendChild(row);
+}
+
+function updateDocLabel(input, idx) {
+    const sizeSpan = document.getElementById('docSize_' + idx);
+    if (sizeSpan && input.files[0]) {
+        sizeSpan.textContent = (input.files[0].size / 1024 / 1024).toFixed(2) + ' MB';
+        sizeSpan.classList.remove('hidden');
+    }
+}
+
+function removeDocRow(idx) {
+    const row = document.getElementById('docRow_' + idx);
+    if (row) row.remove();
 }
 
 function activateStep(step) {
@@ -722,21 +741,34 @@ if (hasQuestions) {
     activateStep(2);
 }
 
+const techRequired = {{ $requireTech ? 'true' : 'false' }};
+const finRequired  = {{ $requireFin  ? 'true' : 'false' }};
+
 function toggleProposal(type, mode) {
-    const writeBox = document.getElementById(type + 'WriteBox');
+    const writeBox  = document.getElementById(type + 'WriteBox');
     const uploadBox = document.getElementById(type + 'UploadBox');
-    const writeBtn = document.getElementById(type + 'WriteBtn');
+    const writeBtn  = document.getElementById(type + 'WriteBtn');
     const uploadBtn = document.getElementById(type + 'UploadBtn');
+    const textarea  = writeBox ? writeBox.querySelector('textarea') : null;
+    const fileInput = uploadBox ? uploadBox.querySelector('input[type="file"]') : null;
+    const isReq     = type === 'tech' ? techRequired : finRequired;
+
     if (mode === 'write') {
         writeBox.classList.remove('hidden');
         uploadBox.classList.add('hidden');
-        writeBtn.className = 'px-3 py-1 text-xs rounded-full bg-green-600 text-white';
+        writeBtn.className  = 'px-3 py-1 text-xs rounded-full bg-green-600 text-white';
         uploadBtn.className = 'px-3 py-1 text-xs rounded-full bg-gray-200 text-gray-700';
+        // Restore required on textarea, clear file input requirement
+        if (textarea)  textarea.required  = isReq;
+        if (fileInput) { fileInput.required = false; fileInput.value = ''; }
     } else {
         writeBox.classList.add('hidden');
         uploadBox.classList.remove('hidden');
-        writeBtn.className = 'px-3 py-1 text-xs rounded-full bg-gray-200 text-gray-700';
+        writeBtn.className  = 'px-3 py-1 text-xs rounded-full bg-gray-200 text-gray-700';
         uploadBtn.className = 'px-3 py-1 text-xs rounded-full bg-green-600 text-white';
+        // Textarea is hidden — remove required to prevent "not focusable" browser error
+        if (textarea)  textarea.required  = false;
+        if (fileInput) fileInput.required = isReq;
     }
 }
 

@@ -144,7 +144,11 @@
                         <td class="px-6 py-4 text-sm text-gray-600">{{ $app->vendor->company_name ?? 'N/A' }}</td>
                         @if($tenderType === 'online')
                         <td class="px-6 py-4 text-sm font-semibold text-green-600">
-                            {{ ($app->bid_amount !== null && $app->bid_amount > 0) ? '₹' . number_format($app->bid_amount, 2) : 'N/A' }}
+                            @if($app->tender && !$app->tender->isBidOpen())
+                                <span class="text-gray-400 font-normal text-xs"><i class="fas fa-lock mr-1"></i>Sealed</span>
+                            @else
+                                {{ ($app->bid_amount !== null && $app->bid_amount > 0) ? '₹' . number_format($app->bid_amount, 2) : 'N/A' }}
+                            @endif
                         </td>
                         @else
                         <td class="px-6 py-4">
@@ -264,16 +268,7 @@ const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || 
 const rolePrefix = window.location.pathname.startsWith('/super-admin/') ? 'super-admin' : 'admin';
 
 function viewApplication(id) {
-    const modal = document.getElementById('viewAppModal');
-    const detailsDiv = document.getElementById('applicationDetails');
-    modal.style.display = 'flex';
-    detailsDiv.innerHTML = '<div class="text-center py-8"><i class="fas fa-spinner fa-spin text-3xl text-blue-600"></i><p class="mt-2 text-gray-500">Loading application details...</p></div>';
-    fetch(`/${rolePrefix}/applications/${id}`, {
-        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'text/html' }
-    })
-    .then(r => r.ok ? r.text() : Promise.reject(r))
-    .then(html => { detailsDiv.innerHTML = html; })
-    .catch(() => { detailsDiv.innerHTML = '<div class="text-center py-8 text-red-500">Error loading application details.</div>'; });
+    window.location.href = `/${rolePrefix}/applications/${id}`;
 }
 
 function closeAppModal() {

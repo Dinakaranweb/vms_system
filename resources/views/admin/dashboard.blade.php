@@ -207,7 +207,7 @@
         <div>
             <div class="stat-lbl">Total Tenders</div>
             <div class="stat-val">{{ $tenderStats['total'] }}</div>
-            <div class="stat-sub">{{ $tenderStats['online'] }} online · {{ $tenderStats['postal'] }} postal</div>
+            <div class="stat-sub">{{ $tenderStats['online'] }} online · {{ $tenderStats['postal'] }} postal · {{ $tenderStats['hybrid'] ?? 0 }} hybrid</div>
         </div>
     </div>
     <div class="stat-card sc-green">
@@ -479,6 +479,10 @@
     </div>
 </div>
 
+<div class="max-w-7xl mx-auto mt-6">
+    @include('partials.dashboard-widgets', ['widgetData' => $widgetData, 'hideEmptyState' => true])
+</div>
+
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
@@ -576,7 +580,7 @@ new Chart(document.getElementById('appDonut'), {
 new Chart(document.getElementById('tenderBarChart'), {
     type: 'bar',
     data: {
-        labels: ['Draft', 'Published', 'Closed', 'Online', 'Postal'],
+        labels: ['Draft', 'Published', 'Closed', 'Online', 'Postal', 'Hybrid'],
         datasets: [{
             label: 'Count',
             data: [
@@ -585,8 +589,9 @@ new Chart(document.getElementById('tenderBarChart'), {
                 {{ $tenderStats['closed'] }},
                 {{ $tenderStats['online'] }},
                 {{ $tenderStats['postal'] }},
+                {{ $tenderStats['hybrid'] ?? 0 }},
             ],
-            backgroundColor: ['#fbbf24','#34d399','#f87171','#60a5fa','#a78bfa'],
+            backgroundColor: ['#fbbf24','#34d399','#f87171','#60a5fa','#a78bfa','#c084fc'],
             borderRadius: 6, borderSkipped: false,
         }]
     },

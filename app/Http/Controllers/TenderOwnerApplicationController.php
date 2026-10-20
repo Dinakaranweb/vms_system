@@ -10,6 +10,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use App\Mail\ApplicationAwardedMail;
+use App\Mail\ApplicationShortlistedMail;
+use App\Mail\ApplicationRejectedByAdminMail;
 use App\Mail\WorkOrderMail;
 use Barryvdh\DomPDF\Facade\Pdf;
 
@@ -18,7 +20,7 @@ class TenderOwnerApplicationController extends Controller
     public function index(Request $request)
     {
         $user       = auth()->user();
-        $tenderType = in_array($request->tender_type, ['online', 'postal']) ? $request->tender_type : 'online';
+        $tenderType = in_array($request->tender_type, ['online', 'postal', 'hybrid']) ? $request->tender_type : 'online';
 
         $allTenderIds  = $user->ownedTenders()->pluck('id');
         $typeTenderIds = $user->ownedTenders()->where('tender_type', $tenderType)->pluck('id');
@@ -51,7 +53,7 @@ class TenderOwnerApplicationController extends Controller
 
     public function show($id)
     {
-        $application = TenderApplication::with(['tender', 'vendor', 'tender.owner', 'eligibilityAnswers.question'])->findOrFail($id);
+        $application = TenderApplication::with(['tender', 'vendor', 'tender.owner', 'eligibilityAnswers.question', 'queries.sender'])->findOrFail($id);
 
         if ($application->tender->owner_id !== auth()->id()) {
             abort(403, 'You do not have permission to view this application.');
@@ -59,7 +61,11 @@ class TenderOwnerApplicationController extends Controller
 
         $contractExists = Contract::where('application_id', $id)->exists();
 
-        return view('tender-owner.applications.show', compact('application', 'contractExists'));
+        if (request()->ajax()) {
+            return view('tender-owner.applications.show', compact('application', 'contractExists'));
+        }
+
+        return view('tender-owner.applications.detail', compact('application', 'contractExists'));
     }
 
     public function shortlist($id)
@@ -81,6 +87,13 @@ class TenderOwnerApplicationController extends Controller
                 'reviewed_at' => now(),
                 'admin_remarks' => request()->remarks ?? null,
             ]);
+
+            try {
+                $application->load('tender', 'vendor');
+                Mail::to($application->vendor->email)->send(new ApplicationShortlistedMail($application));
+            } catch (\Exception $e) {
+                \Log::error('Shortlisted email error: ' . $e->getMessage());
+            }
 
             return response()->json(['success' => true, 'message' => 'Application shortlisted successfully!']);
         } catch (\Exception $e) {
@@ -110,6 +123,13 @@ class TenderOwnerApplicationController extends Controller
                 'reviewed_at'      => now(),
             ]);
 
+            try {
+                $application->load('tender', 'vendor');
+                Mail::to($application->vendor->email)->send(new ApplicationRejectedByAdminMail($application));
+            } catch (\Exception $e) {
+                \Log::error('Rejected email error: ' . $e->getMessage());
+            }
+
             return response()->json(['success' => true, 'message' => 'Application rejected successfully!']);
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => 'Failed to reject: ' . $e->getMessage()], 500);
@@ -134,6 +154,21 @@ class TenderOwnerApplicationController extends Controller
         }
         if ($isPartialOrder && !in_array($application->status, ['shortlisted', 'awarded'])) {
             return redirect()->back()->with('error', 'Cannot create a partial order for this application.');
+        }
+
+        if (!$isPartialOrder && ($gateReason = \App\Models\AwardRecommendation::gateBlocksAward($application))) {
+            return redirect()->back()->with('error', $gateReason);
+        }
+
+        // Block if the tender is already awarded to a different application
+        if (!$isPartialOrder) {
+            $alreadyAwarded = TenderApplication::where('tender_id', $application->tender_id)
+                ->where('status', 'awarded')
+                ->where('id', '!=', $application->id)
+                ->exists();
+            if ($alreadyAwarded) {
+                return redirect()->back()->with('error', 'This tender has already been awarded to another vendor. Only one award is allowed per tender.');
+            }
         }
 
         $year               = date('Y');
@@ -188,6 +223,23 @@ class TenderOwnerApplicationController extends Controller
             }
             if ($isPartialOrder && !in_array($application->status, ['shortlisted', 'awarded'])) {
                 return back()->withInput()->withErrors(['general' => 'Cannot create a partial order for this application.']);
+            }
+
+            if (!$isPartialOrder && ($gateReason = \App\Models\AwardRecommendation::gateBlocksAward($application))) {
+                DB::rollBack();
+                return back()->withInput()->withErrors(['general' => $gateReason]);
+            }
+
+            // Block if the tender already has a different awarded application
+            if (!$isPartialOrder) {
+                $alreadyAwarded = TenderApplication::where('tender_id', $application->tender_id)
+                    ->where('status', 'awarded')
+                    ->where('id', '!=', $id)
+                    ->exists();
+                if ($alreadyAwarded) {
+                    DB::rollBack();
+                    return back()->withInput()->withErrors(['general' => 'This tender has already been awarded to another vendor. Only one award is allowed per tender.']);
+                }
             }
 
             if (!$isPartialOrder || $application->status === 'shortlisted') {

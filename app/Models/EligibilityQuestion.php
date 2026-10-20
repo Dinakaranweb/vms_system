@@ -8,14 +8,16 @@ class EligibilityQuestion extends Model
 {
     protected $fillable = [
         'tender_id', 'question', 'description', 'field_type',
-        'options', 'eligible_options', 'is_required', 'order', 'max_size', 'validation_rules', 'determines_eligibility'
+        'options', 'eligible_options', 'eligibility_condition',
+        'is_required', 'order', 'max_size', 'validation_rules', 'determines_eligibility'
     ];
 
     protected $casts = [
-        'options' => 'array',
-        'eligible_options' => 'array',
-        'validation_rules' => 'array',
-        'is_required' => 'boolean',
+        'options'                => 'array',
+        'eligible_options'       => 'array',
+        'eligibility_condition'  => 'array',
+        'validation_rules'       => 'array',
+        'is_required'            => 'boolean',
         'determines_eligibility' => 'boolean',
     ];
 

@@ -106,7 +106,9 @@
                                     {{ $app->application_number }} &nbsp;·&nbsp; {{ $app->tender->tender_number }}
                                 </p>
                                 <p class="text-xs text-gray-500 mt-0.5">
-                                    @if($app->bid_amount !== null && $app->bid_amount > 0)
+                                    @if($app->tender && !$app->tender->isBidOpen())
+                                        Bid: <i class="fas fa-lock"></i> Sealed
+                                    @elseif($app->bid_amount !== null && $app->bid_amount > 0)
                                         Bid: ₹{{ number_format($app->bid_amount, 2) }}
                                     @else
                                         Bid: N/A
@@ -135,5 +137,7 @@
         </div>
 
     </div>
+
+    @include('partials.dashboard-widgets', ['widgetData' => $widgetData, 'hideEmptyState' => true])
 </div>
 @endsection

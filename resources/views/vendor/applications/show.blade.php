@@ -1,7 +1,19 @@
 @extends('layouts.dashboard')
 
-@section('title', 'Application Details')
+@section('title', 'Application #' . $application->application_number)
 @section('header', 'Application Details')
+
+@push('styles')
+<link href="https://cdn.jsdelivr.net/npm/summernote@0.8.20/dist/summernote-lite.min.css" rel="stylesheet">
+<style>
+@media print {
+    .no-print, .nav-sidebar, header, .topbar { display:none !important; }
+    body { font-size:12px; }
+    .shadow-sm { box-shadow:none !important; }
+    .rounded-xl { border-radius:0 !important; }
+}
+</style>
+@endpush
 
 @section('content')
 <div class="max-w-4xl mx-auto">
@@ -11,9 +23,15 @@
                 <h3 class="text-lg font-semibold text-white">
                     <i class="fas fa-file-alt mr-2"></i>Application #{{ $application->application_number }}
                 </h3>
-                <a href="{{ route('vendor.applications') }}" class="text-white hover:text-gray-200">
-                    <i class="fas fa-arrow-left mr-1"></i> Back
-                </a>
+                <div class="flex items-center gap-3">
+                    <button onclick="window.print()"
+                            class="no-print inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-medium rounded-lg transition">
+                        <i class="fas fa-print"></i> Print
+                    </button>
+                    <a href="{{ route('vendor.applications') }}" class="text-white hover:text-gray-200 text-sm">
+                        <i class="fas fa-arrow-left mr-1"></i> Back
+                    </a>
+                </div>
             </div>
         </div>
         
@@ -60,37 +78,15 @@
                 @endif
             </div>
             
-            <div class="border-t pt-4">
-                <h4 class="font-semibold text-gray-800 mb-3">Proposals</h4>
-                <div class="space-y-4">
-                    <div>
-                        <label class="text-sm font-medium text-gray-700">Technical Proposal</label>
-                        <p class="text-gray-600 mt-1">{{ $application->technical_proposal ?? 'Not provided' }}</p>
-                    </div>
-                    <div>
-                        <label class="text-sm font-medium text-gray-700">Financial Proposal</label>
-                        <p class="text-gray-600 mt-1">{{ $application->financial_proposal ?? 'Not provided' }}</p>
-                    </div>
-                </div>
-            </div>
-            
-            @if($application->documents && count($application->documents) > 0)
-            <div class="border-t pt-4 mt-4">
-                <h4 class="font-semibold text-gray-800 mb-3">Supporting Documents</h4>
-                <div class="space-y-2">
-                    @foreach($application->documents as $index => $doc)
-                    <div class="flex items-center justify-between bg-gray-50 rounded-lg p-2">
-                        <div class="flex items-center space-x-2">
-                            <i class="fas fa-file-pdf text-red-500"></i>
-                            <span class="text-sm text-gray-700">{{ $doc['name'] ?? 'Document ' . ($index + 1) }}</span>
-                        </div>
-                        <span class="text-xs text-gray-500">{{ number_format(($doc['size'] ?? 0) / 1024, 2) }} KB</span>
-                    </div>
-                    @endforeach
-                </div>
-            </div>
-            @endif
+            @include('partials.application-proposals')
+
+            @include('partials.application-query-thread')
         </div>
     </div>
 </div>
+
+@push('scripts')
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/summernote@0.8.20/dist/summernote-lite.min.js"></script>
+@endpush
 @endsection

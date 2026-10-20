@@ -39,7 +39,7 @@ class PublicTenderApiController extends Controller
             });
         }
 
-        if ($type && in_array($type, ['online', 'postal'])) {
+        if ($type && in_array($type, ['online', 'postal', 'hybrid'])) {
             $query->where('tender_type', $type);
         }
 
@@ -170,6 +170,16 @@ class PublicTenderApiController extends Controller
             ->whereDoesntHave('awardedApplication')
             ->with(['documents' => fn($q) => $q->where('is_public', true)])
             ->findOrFail($id);
+
+        // Track public/API view
+        try {
+            \App\Models\TenderView::create([
+                'tender_id'  => $tender->id,
+                'user_id'    => null,
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+        } catch (\Exception) {}
 
         $now      = now();
         $deadline = \Carbon\Carbon::parse($tender->submission_deadline);

@@ -28,25 +28,61 @@
             <p class="text-gray-900">{{ $application->vendor->company_name ?? 'N/A' }}</p>
             <p class="text-xs text-gray-500">{{ $application->vendor->vendor_code ?? 'N/A' }}</p>
         </div>
-        @if(!($application->tender && $application->tender->isPostal()))
         <div>
             <label class="text-xs text-gray-500 uppercase">Bid Amount</label>
             <p class="text-lg font-bold text-green-600">
-                @if($application->bid_amount !== null && $application->bid_amount > 0)₹{{ number_format($application->bid_amount, 2) }}@else<span class="text-gray-400 text-sm font-normal">N/A</span>@endif
+                @if($application->tender && !$application->tender->isBidOpen())
+                    <span class="text-gray-400 text-sm font-normal"><i class="fas fa-lock mr-1"></i>Sealed until bids are opened</span>
+                @elseif($application->bid_amount !== null && $application->bid_amount > 0)
+                    ₹{{ number_format($application->bid_amount, 2) }}
+                @else
+                    <span class="text-gray-400 text-sm font-normal">N/A</span>
+                @endif
             </p>
         </div>
-        @endif
         <div>
             <label class="text-xs text-gray-500 uppercase">Submitted On</label>
             <p class="text-gray-900">{{ $application->created_at->format('d M, Y H:i') }}</p>
         </div>
         <div class="col-span-2">
             <label class="text-xs text-gray-500 uppercase">Technical Proposal</label>
-            <p class="text-gray-700 mt-1">{{ $application->technical_proposal ?? 'Not provided' }}</p>
+            @if($application->technical_proposal && trim($application->technical_proposal) !== '')
+                <p class="text-gray-700 mt-1 text-sm leading-relaxed whitespace-pre-line">{{ $application->technical_proposal }}</p>
+            @endif
+            @if($application->technical_proposal_file)
+                <div class="mt-2 flex gap-2 flex-wrap">
+                    <a href="{{ Storage::url($application->technical_proposal_file) }}" target="_blank"
+                       class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition">
+                        <i class="fas fa-eye"></i> View File
+                    </a>
+                    <a href="{{ Storage::url($application->technical_proposal_file) }}" download
+                       class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg transition">
+                        <i class="fas fa-download"></i> Download
+                    </a>
+                </div>
+            @elseif(!($application->technical_proposal && trim($application->technical_proposal) !== ''))
+                <p class="text-gray-400 italic text-sm mt-1">Not provided</p>
+            @endif
         </div>
         <div class="col-span-2">
             <label class="text-xs text-gray-500 uppercase">Financial Proposal</label>
-            <p class="text-gray-700 mt-1">{{ $application->financial_proposal ?? 'Not provided' }}</p>
+            @if($application->financial_proposal && trim($application->financial_proposal) !== '')
+                <p class="text-gray-700 mt-1 text-sm leading-relaxed whitespace-pre-line">{{ $application->financial_proposal }}</p>
+            @endif
+            @if($application->financial_proposal_file)
+                <div class="mt-2 flex gap-2 flex-wrap">
+                    <a href="{{ Storage::url($application->financial_proposal_file) }}" target="_blank"
+                       class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition">
+                        <i class="fas fa-eye"></i> View File
+                    </a>
+                    <a href="{{ Storage::url($application->financial_proposal_file) }}" download
+                       class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg transition">
+                        <i class="fas fa-download"></i> Download
+                    </a>
+                </div>
+            @elseif(!($application->financial_proposal && trim($application->financial_proposal) !== ''))
+                <p class="text-gray-400 italic text-sm mt-1">Not provided</p>
+            @endif
         </div>
         @if($application->rejection_reason)
         <div class="col-span-2 bg-red-50 rounded-lg p-3">
@@ -164,11 +200,39 @@
             $awardRoute = str_starts_with(request()->route()->getName() ?? '', 'super-admin.')
                 ? route('super-admin.applications.award-form', $application->id)
                 : route('admin.applications.award-form', $application->id);
+            $tenderAlreadyAwarded = \App\Models\TenderApplication::where('tender_id', $application->tender_id)
+                ->where('status', 'awarded')
+                ->where('id', '!=', $application->id)
+                ->exists();
+            $hasActiveCommittee = \App\Models\PurchaseCommitteeMember::active()->exists();
+            $recommendation = $hasActiveCommittee ? \App\Models\AwardRecommendation::where('application_id', $application->id)->first() : null;
         @endphp
+        @if($tenderAlreadyAwarded)
+        <div class="w-full bg-gray-100 text-gray-500 py-2 rounded-lg flex items-center justify-center gap-2 text-sm font-medium border border-gray-200">
+            <i class="fas fa-lock"></i> Award Locked — Tender already awarded to another vendor
+        </div>
+        @elseif($hasActiveCommittee && (!$recommendation || $recommendation->status !== 'completed'))
+            @if(!$application->tender->isBidOpen())
+            <div class="w-full bg-amber-50 text-amber-700 py-2 rounded-lg flex items-center justify-center gap-2 text-sm font-medium border border-amber-200">
+                <i class="fas fa-lock"></i> Open bids for this tender before recommending an award
+            </div>
+            @elseif(!$recommendation)
+            <a href="{{ route('purchase-committee.recommendations.create', $application->id) }}"
+               class="w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700 transition flex items-center justify-center gap-2 text-sm font-semibold">
+                <i class="fas fa-gavel"></i> Recommend for Award — Purchase Committee Approval Required
+            </a>
+            @else
+            <a href="{{ route('purchase-committee.recommendations.show', $recommendation->id) }}"
+               class="w-full bg-indigo-50 text-indigo-700 py-2 rounded-lg hover:bg-indigo-100 transition flex items-center justify-center gap-2 text-sm font-semibold border border-indigo-200">
+                <i class="fas fa-hourglass-half"></i> View Committee Approval Status ({{ ucfirst(str_replace('_',' ',$recommendation->status)) }})
+            </a>
+            @endif
+        @else
         <a href="{{ $awardRoute }}"
            class="w-full bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700 transition flex items-center justify-center gap-2 text-sm font-semibold">
             <i class="fas fa-trophy"></i> Award &amp; Create WO / PO
         </a>
+        @endif
     </div>
     @endif
 </div>

@@ -142,7 +142,11 @@
                         <td class="px-6 py-4 text-sm text-gray-600">{{ $app->vendor->company_name ?? 'N/A' }}</td>
                         @if($tenderType === 'online')
                         <td class="px-6 py-4 text-sm font-semibold text-green-600">
-                            {{ ($app->bid_amount !== null && $app->bid_amount > 0) ? '₹' . number_format($app->bid_amount, 2) : 'N/A' }}
+                            @if($app->tender && !$app->tender->isBidOpen())
+                                <span class="text-gray-400 font-normal text-xs"><i class="fas fa-lock mr-1"></i>Sealed</span>
+                            @else
+                                {{ ($app->bid_amount !== null && $app->bid_amount > 0) ? '₹' . number_format($app->bid_amount, 2) : 'N/A' }}
+                            @endif
                         </td>
                         @else
                         <td class="px-6 py-4">
@@ -261,15 +265,7 @@ function closeDocumentModal() {
 }
 
 function viewApplication(id) {
-    const modal = document.getElementById('viewAppModal');
-    const detailsDiv = document.getElementById('applicationDetails');
-    modal.style.display = 'flex';
-    detailsDiv.innerHTML = '<div class="text-center py-8"><i class="fas fa-spinner fa-spin text-3xl"></i><p>Loading...</p></div>';
-    fetch(`/tender-owner/applications/${id}`, {
-        headers: { 'X-Requested-With': 'XMLHttpRequest' }
-    })
-    .then(response => response.text())
-    .then(html => { detailsDiv.innerHTML = html; });
+    window.location.href = `/tender-owner/applications/${id}`;
 }
 
 function closeAppModal() {

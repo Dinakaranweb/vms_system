@@ -23,7 +23,7 @@ class ReportController extends Controller
 
         $ownerTenderIds = $isTenderOwner ? $user->ownedTenders()->pluck('id') : null;
 
-        $query = Contract::with(['tender', 'vendor', 'application'])
+        $query = Contract::with(['tender', 'vendor', 'application.queries.sender'])
             ->orderBy('created_at', 'desc');
 
         if ($isTenderOwner) {

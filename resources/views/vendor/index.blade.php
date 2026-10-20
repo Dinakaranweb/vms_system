@@ -129,6 +129,7 @@
                                     </p>
                                 </div>
                             </div>
+                            @if($tender->opening_date)
                             <div class="flex items-center space-x-2">
                                 <i class="fas fa-calendar-check text-gray-400"></i>
                                 <div>
@@ -136,6 +137,7 @@
                                     <p class="font-semibold text-gray-900">{{ $tender->opening_date->format('d M, Y') }}</p>
                                 </div>
                             </div>
+                            @endif
                             <div class="flex items-center space-x-2">
                                 <i class="fas fa-file-alt text-gray-400"></i>
                                 <div>

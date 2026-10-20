@@ -18,6 +18,7 @@ use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\WorkOrderController;
 use App\Http\Controllers\EligibilityFailureController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\ApplicationQueryController;
 
 /*
 |--------------------------------------------------------------------------
@@ -82,6 +83,31 @@ Route::middleware(['auth', 'role:super-admin'])->prefix('super-admin')->name('su
     Route::get('/audit-logs', [SuperAdminController::class, 'auditLogs'])->name('audit-logs');
     Route::get('/audit-logs/{id}', [SuperAdminController::class, 'auditLogDetails'])->name('audit-logs.show');
 
+    // Role Builder — create custom roles, assign permissions
+    Route::get('/roles', [\App\Http\Controllers\RoleManagementController::class, 'index'])->name('roles.index');
+    Route::get('/roles/create', [\App\Http\Controllers\RoleManagementController::class, 'create'])->name('roles.create');
+    Route::post('/roles', [\App\Http\Controllers\RoleManagementController::class, 'store'])->name('roles.store');
+    Route::get('/roles/{id}/edit', [\App\Http\Controllers\RoleManagementController::class, 'edit'])->name('roles.edit');
+    Route::put('/roles/{id}', [\App\Http\Controllers\RoleManagementController::class, 'update'])->name('roles.update');
+    Route::delete('/roles/{id}', [\App\Http\Controllers\RoleManagementController::class, 'destroy'])->name('roles.destroy');
+
+    // Menu Builder — control sidebar visibility per role
+    Route::get('/menu-builder/{roleId}', [\App\Http\Controllers\MenuBuilderController::class, 'edit'])->name('menu-builder.edit');
+    Route::put('/menu-builder/{roleId}', [\App\Http\Controllers\MenuBuilderController::class, 'update'])->name('menu-builder.update');
+
+    // Dashboard Widget Builder — control dashboard widgets per role
+    Route::get('/widget-builder/{roleId}', [\App\Http\Controllers\DashboardWidgetBuilderController::class, 'edit'])->name('widget-builder.edit');
+    Route::put('/widget-builder/{roleId}', [\App\Http\Controllers\DashboardWidgetBuilderController::class, 'update'])->name('widget-builder.update');
+
+    // Purchase Committee — member management
+    Route::get('/purchase-committee', [\App\Http\Controllers\PurchaseCommitteeManagementController::class, 'index'])->name('purchase-committee.index');
+    Route::get('/purchase-committee/create', [\App\Http\Controllers\PurchaseCommitteeManagementController::class, 'create'])->name('purchase-committee.create');
+    Route::post('/purchase-committee', [\App\Http\Controllers\PurchaseCommitteeManagementController::class, 'store'])->name('purchase-committee.store');
+    Route::post('/purchase-committee/reorder', [\App\Http\Controllers\PurchaseCommitteeManagementController::class, 'reorder'])->name('purchase-committee.reorder');
+    Route::post('/purchase-committee/{id}/toggle-active', [\App\Http\Controllers\PurchaseCommitteeManagementController::class, 'toggleActive'])->name('purchase-committee.toggle-active');
+    Route::post('/purchase-committee/{id}/reset-password', [\App\Http\Controllers\PurchaseCommitteeManagementController::class, 'resetPassword'])->name('purchase-committee.reset-password');
+    Route::delete('/purchase-committee/{id}', [\App\Http\Controllers\PurchaseCommitteeManagementController::class, 'destroy'])->name('purchase-committee.destroy');
+
     // Tender Management (same as admin)
     Route::get('/tenders', [TenderController::class, 'index'])->name('tenders');
     Route::get('/tenders/data', [TenderController::class, 'getTendersData'])->name('tenders.data');
@@ -94,6 +120,9 @@ Route::middleware(['auth', 'role:super-admin'])->prefix('super-admin')->name('su
     Route::post('/tenders/{id}/publish', [TenderController::class, 'publish'])->name('tenders.publish');
     Route::post('/tenders/{id}/university-display', [TenderController::class, 'updateUniversityDisplay'])->name('tenders.university-display');
     Route::post('/tenders/{id}/close', [TenderController::class, 'close'])->name('tenders.close');
+    Route::post('/tenders/{id}/open-bidding', [TenderController::class, 'openBidding'])->name('tenders.open-bidding');
+    Route::post('/tenders/{id}/queries', [\App\Http\Controllers\TenderQueryController::class, 'store'])->name('tenders.queries.store');
+    Route::post('/tenders/{id}/queries/mark-read', [\App\Http\Controllers\TenderQueryController::class, 'markRead'])->name('tenders.queries.mark-read');
     Route::post('/tenders/{id}/duplicate', [TenderController::class, 'duplicate'])->name('tenders.duplicate');
     Route::delete('/tenders/documents/{id}', [TenderController::class, 'deleteDocument'])->name('tenders.delete-document');
     Route::post('/tenders/documents/{id}/order', [TenderController::class, 'updateDocumentOrder'])->name('tenders.update-document-order');
@@ -103,6 +132,7 @@ Route::middleware(['auth', 'role:super-admin'])->prefix('super-admin')->name('su
     Route::put('/tenders/questions/{id}', [TenderController::class, 'updateEligibilityQuestion'])->name('tenders.update-question');
     Route::delete('/tenders/questions/{id}', [TenderController::class, 'deleteEligibilityQuestion'])->name('tenders.delete-question');
     Route::post('/tenders/{id}/questions', [TenderController::class, 'storeEligibilityQuestion'])->name('tenders.store-question');
+    Route::get('/tenders/{id}/analytics', [TenderController::class, 'analytics'])->name('tenders.analytics');
 
     // Committee Management
     Route::get('/tenders/{id}/committee', [TenderOwnerController::class, 'showCommittee'])->name('tenders.committee');
@@ -120,6 +150,8 @@ Route::middleware(['auth', 'role:super-admin'])->prefix('super-admin')->name('su
     Route::post('/applications/{id}/reject', [ApplicationController::class, 'reject'])->name('applications.reject');
     Route::post('/applications/{id}/award', [ApplicationController::class, 'award'])->name('applications.award');
     Route::post('/applications/bulk-action', [ApplicationController::class, 'bulkAction'])->name('applications.bulk-action');
+    Route::post('/applications/{id}/queries', [ApplicationQueryController::class, 'store'])->name('applications.queries.store');
+    Route::post('/applications/{id}/queries/mark-read', [ApplicationQueryController::class, 'markRead'])->name('applications.queries.mark-read');
 
     // Contract Management + Work/Purchase Order
     Route::get('/contracts', [ContractController::class, 'index'])->name('contracts');
@@ -151,6 +183,7 @@ Route::middleware(['auth', 'role:super-admin'])->prefix('super-admin')->name('su
     Route::delete('/users/{id}', [UserController::class, 'destroy'])->name('users.delete');
     Route::post('/users/{id}/toggle-status', [UserController::class, 'toggleStatus'])->name('users.toggle-status');
     Route::post('/users/bulk-action', [UserController::class, 'bulkAction'])->name('users.bulk-action');
+    Route::post('/users/{id}/reset-password', [UserController::class, 'resetPassword'])->name('users.reset-password');
 
     // Category Management
     Route::get('/categories', [CategoryController::class, 'index'])->name('categories');
@@ -204,6 +237,9 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
     Route::post('/tenders/{id}/publish', [TenderController::class, 'publish'])->name('tenders.publish');
     Route::post('/tenders/{id}/university-display', [TenderController::class, 'updateUniversityDisplay'])->name('tenders.university-display');
     Route::post('/tenders/{id}/close', [TenderController::class, 'close'])->name('tenders.close');
+    Route::post('/tenders/{id}/open-bidding', [TenderController::class, 'openBidding'])->name('tenders.open-bidding');
+    Route::post('/tenders/{id}/queries', [\App\Http\Controllers\TenderQueryController::class, 'store'])->name('tenders.queries.store');
+    Route::post('/tenders/{id}/queries/mark-read', [\App\Http\Controllers\TenderQueryController::class, 'markRead'])->name('tenders.queries.mark-read');
     Route::post('/tenders/{id}/duplicate', [TenderController::class, 'duplicate'])->name('tenders.duplicate');
 
     // Document Management
@@ -217,6 +253,7 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
     Route::put('/tenders/questions/{id}', [TenderController::class, 'updateEligibilityQuestion'])->name('tenders.update-question');
     Route::delete('/tenders/questions/{id}', [TenderController::class, 'deleteEligibilityQuestion'])->name('tenders.delete-question');
     Route::post('/tenders/{id}/questions', [TenderController::class, 'storeEligibilityQuestion'])->name('tenders.store-question');
+    Route::get('/tenders/{id}/analytics', [TenderController::class, 'analytics'])->name('tenders.analytics');
 
     // Application Management
     Route::get('/applications', [ApplicationController::class, 'index'])->name('applications');
@@ -227,6 +264,8 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
     Route::post('/applications/{id}/reject', [ApplicationController::class, 'reject'])->name('applications.reject');
     Route::post('/applications/{id}/award', [ApplicationController::class, 'award'])->name('applications.award');
     Route::post('/applications/bulk-action', [ApplicationController::class, 'bulkAction'])->name('applications.bulk-action');
+    Route::post('/applications/{id}/queries', [ApplicationQueryController::class, 'store'])->name('applications.queries.store');
+    Route::post('/applications/{id}/queries/mark-read', [ApplicationQueryController::class, 'markRead'])->name('applications.queries.mark-read');
 
     // Contract Management
     Route::get('/contracts', [ContractController::class, 'index'])->name('contracts');
@@ -309,6 +348,9 @@ Route::middleware(['auth', 'role:tender-owner'])->prefix('tender-owner')->name('
     Route::post('/tenders/{id}/publish', [TenderController::class, 'ownerPublish'])->name('tenders.publish');
     Route::post('/tenders/{id}/university-display', [TenderController::class, 'updateUniversityDisplay'])->name('tenders.university-display');
     Route::post('/tenders/{id}/close', [TenderController::class, 'ownerClose'])->name('tenders.close');
+    Route::post('/tenders/{id}/open-bidding', [TenderController::class, 'openBidding'])->name('tenders.open-bidding');
+    Route::post('/tenders/{id}/queries', [\App\Http\Controllers\TenderQueryController::class, 'store'])->name('tenders.queries.store');
+    Route::post('/tenders/{id}/queries/mark-read', [\App\Http\Controllers\TenderQueryController::class, 'markRead'])->name('tenders.queries.mark-read');
     
     // Applications
     Route::get('/applications', [TenderOwnerApplicationController::class, 'index'])->name('applications.index');
@@ -318,7 +360,14 @@ Route::middleware(['auth', 'role:tender-owner'])->prefix('tender-owner')->name('
     Route::get('/applications/{id}/award', [TenderOwnerApplicationController::class, 'awardForm'])->name('applications.award-form');
     Route::post('/applications/{id}/award', [TenderOwnerApplicationController::class, 'award'])->name('applications.award');
     Route::get('/applications/stats', [TenderOwnerApplicationController::class, 'getStats'])->name('applications.stats');
-    
+    Route::post('/applications/{id}/queries', [ApplicationQueryController::class, 'store'])->name('applications.queries.store');
+    Route::post('/applications/{id}/queries/mark-read', [ApplicationQueryController::class, 'markRead'])->name('applications.queries.mark-read');
+
+    // Notifications
+    Route::get('/notifications', [TenderOwnerController::class, 'notifications'])->name('notifications');
+    Route::post('/notifications/{id}/read', [TenderOwnerController::class, 'markNotificationRead'])->name('notifications.read');
+    Route::post('/notifications/read-all', [TenderOwnerController::class, 'markAllNotificationsRead'])->name('notifications.read-all');
+
     // Contracts — full management for tender-owner
     Route::get('/contracts', [ContractController::class, 'index'])->name('contracts.index');
     Route::get('/contracts/{id}', [ContractController::class, 'show'])->name('contracts.show');
@@ -373,6 +422,8 @@ Route::middleware(['auth', 'role:vendor'])->prefix('vendor')->name('vendor.')->g
     Route::get('/applications/{id}', [VendorController::class, 'applicationDetails'])->name('applications.show');
     Route::post('/applications/{id}/withdraw', [VendorController::class, 'withdrawApplication'])->name('applications.withdraw');
     Route::get('/applications/{id}/download/{documentIndex}', [VendorController::class, 'downloadDocument'])->name('applications.download');
+    Route::post('/applications/{id}/queries', [ApplicationQueryController::class, 'store'])->name('applications.queries.store');
+    Route::post('/applications/{id}/queries/mark-read', [ApplicationQueryController::class, 'markRead'])->name('applications.queries.mark-read');
     
     // Contract Management
     Route::get('/contracts', [VendorController::class, 'contracts'])->name('contracts');
@@ -380,6 +431,7 @@ Route::middleware(['auth', 'role:vendor'])->prefix('vendor')->name('vendor.')->g
     Route::get('/contracts/{id}', [VendorController::class, 'contractDetails'])->name('contracts.show');
     Route::post('/contracts/{id}/sign', [VendorController::class, 'signContract'])->name('contracts.sign');
     Route::get('/contracts/{id}/download', [VendorController::class, 'downloadContract'])->name('contracts.download');
+    Route::get('/contracts/{id}/order-pdf', [VendorController::class, 'downloadOrderPdf'])->name('contracts.order-pdf');
     
     // Profile Management
     Route::get('/profile', [VendorController::class, 'profile'])->name('profile');
@@ -403,6 +455,36 @@ Route::middleware(['auth', 'role:committee-member'])->prefix('committee')->name(
     Route::get('/applications/{id}', [\App\Http\Controllers\CommitteeController::class, 'showApplication'])->name('applications.show');
 });
 
+// ==================== MANAGEMENT ROUTES (VC / Pro-VC / Registrar / Finance Officer) ====================
+Route::middleware(['auth', 'role:management'])->prefix('management')->name('management.')->group(function () {
+    Route::get('/dashboard', [\App\Http\Controllers\ManagementController::class, 'dashboard'])->name('dashboard');
+    Route::get('/tenders', [\App\Http\Controllers\ManagementController::class, 'tenders'])->name('tenders.index');
+    Route::get('/tenders/{id}', [\App\Http\Controllers\ManagementController::class, 'show'])->name('tenders.show');
+    Route::post('/tenders/{id}/queries', [\App\Http\Controllers\TenderQueryController::class, 'store'])->name('tenders.queries.store');
+    Route::post('/tenders/{id}/queries/mark-read', [\App\Http\Controllers\TenderQueryController::class, 'markRead'])->name('tenders.queries.mark-read');
+});
+
+// ==================== PURCHASE COMMITTEE PORTAL ====================
+Route::middleware(['auth', 'role:purchase-committee'])->prefix('purchase-committee')->name('purchase-committee.')->group(function () {
+    Route::get('/dashboard', [\App\Http\Controllers\PurchaseCommitteePortalController::class, 'dashboard'])->name('dashboard');
+    Route::get('/my-recommendations', [\App\Http\Controllers\PurchaseCommitteePortalController::class, 'myRecommendations'])->name('recommendations.index');
+    Route::get('/tenders', [\App\Http\Controllers\PurchaseCommitteePortalController::class, 'tenders'])->name('tenders.index');
+
+    // Where a member reads the opening code they hand to the Purchase Officer.
+    Route::get('/notifications', [\App\Http\Controllers\PurchaseCommitteePortalController::class, 'notifications'])->name('notifications');
+    Route::post('/notifications/{id}/read', [\App\Http\Controllers\PurchaseCommitteePortalController::class, 'markNotificationRead'])->name('notifications.read');
+    Route::post('/notifications/read-all', [\App\Http\Controllers\PurchaseCommitteePortalController::class, 'markAllNotificationsRead'])->name('notifications.read-all');
+});
+
+// ==================== GENERIC PORTAL (permission-gated, auto-available to any new role) ====================
+Route::middleware(['auth', 'permission:view all tenders'])->prefix('portal')->name('portal.')->group(function () {
+    Route::get('/dashboard', [\App\Http\Controllers\PortalController::class, 'dashboard'])->name('dashboard');
+    Route::get('/tenders', [\App\Http\Controllers\PortalController::class, 'tenders'])->name('tenders.index');
+    Route::get('/tenders/{id}', [\App\Http\Controllers\PortalController::class, 'show'])->name('tenders.show');
+    Route::post('/tenders/{id}/queries', [\App\Http\Controllers\TenderQueryController::class, 'store'])->name('tenders.queries.store');
+    Route::post('/tenders/{id}/queries/mark-read', [\App\Http\Controllers\TenderQueryController::class, 'markRead'])->name('tenders.queries.mark-read');
+});
+
 // ==================== COMMON PROFILE ROUTES ====================
 Route::middleware('auth')->prefix('profile')->name('profile.')->group(function () {
     Route::get('/', [App\Http\Controllers\ProfileController::class, 'index'])->name('index');
@@ -412,51 +494,108 @@ Route::middleware('auth')->prefix('profile')->name('profile.')->group(function (
     Route::delete('/avatar', [App\Http\Controllers\ProfileController::class, 'deleteAvatar'])->name('avatar.delete');
 });
 
+// Postal bid manual entry — reachable by Admin/Super Admin/Tender Owner/Purchase Committee;
+// PostalBidController enforces the actual per-application authorization internally.
+Route::middleware('auth')->prefix('purchase-committee')->name('purchase-committee.')->group(function () {
+    Route::get('/postal-bid/{id}/edit', [\App\Http\Controllers\PostalBidController::class, 'edit'])->name('postal-bid.edit');
+    Route::put('/postal-bid/{id}', [\App\Http\Controllers\PostalBidController::class, 'update'])->name('postal-bid.update');
+    Route::post('/tenders/{id}/open-bidding', [TenderController::class, 'openBidding'])->name('tenders.open-bidding');
+
+    // Tender review gate — every active committee member's one-time code must be collected
+    // before a tender opens. The codes are delivered to each member's own login, read out to
+    // the Purchase Officer in person, and keyed in together on the opening-codes screen below.
+    // TenderReviewController enforces authorization internally.
+    Route::post('/tenders/{id}/open-for-review', [\App\Http\Controllers\TenderReviewController::class, 'openForReview'])->name('review.open');
+    Route::get('/tenders/{id}/opening-codes', [\App\Http\Controllers\TenderReviewController::class, 'openingOtpPanel'])->name('review.opening-codes');
+    Route::post('/tenders/{id}/opening-codes', [\App\Http\Controllers\TenderReviewController::class, 'verifyOpeningOtps'])->name('review.verify-opening-codes');
+    Route::post('/tenders/{id}/opening-codes/resend', [\App\Http\Controllers\TenderReviewController::class, 'resendOpeningOtp'])->name('review.resend-opening-code');
+
+    // Documents shared into the committee's logins once the tender is open — online uploads,
+    // scanned postal submissions, or both for a hybrid tender.
+    Route::get('/tenders/{id}/documents', [\App\Http\Controllers\TenderReviewController::class, 'documents'])->name('review.documents');
+
+    // Recording the physical documents received for a postal/hybrid tender, after the opening
+    // codes have been collected. ReceivedDocumentController enforces authorization internally.
+    Route::get('/tenders/{id}/received-documents', [\App\Http\Controllers\ReceivedDocumentController::class, 'index'])->name('received-documents.index');
+    Route::post('/tenders/{id}/received-documents/{applicationId}', [\App\Http\Controllers\ReceivedDocumentController::class, 'store'])->name('received-documents.store');
+    Route::post('/tenders/{id}/received-documents/{applicationId}/scan', [\App\Http\Controllers\ReceivedDocumentController::class, 'storeScan'])->name('received-documents.scan');
+    Route::post('/tenders/{id}/received-documents/{applicationId}/bid', [\App\Http\Controllers\ReceivedDocumentController::class, 'updateBid'])->name('received-documents.bid');
+    // Award finalization — the Purchase Officer's recorded decision, which gates any contract.
+    Route::get('/tenders/{id}/finalize-award', [\App\Http\Controllers\AwardFinalizationController::class, 'index'])->name('award.finalize');
+    Route::post('/tenders/{id}/finalize-award', [\App\Http\Controllers\AwardFinalizationController::class, 'store'])->name('award.finalize.store');
+    Route::post('/tenders/{id}/finalize-award/{finalizationId}/revoke', [\App\Http\Controllers\AwardFinalizationController::class, 'revoke'])->name('award.finalize.revoke');
+
+    Route::delete('/tenders/{id}/received-documents/{documentId}', [\App\Http\Controllers\ReceivedDocumentController::class, 'destroy'])->name('received-documents.destroy');
+
+    // Superseded: members used to key in their own code here. Kept so old links explain the change.
+    Route::get('/tenders/{id}/review-otp', [\App\Http\Controllers\TenderReviewController::class, 'otpForm'])->name('review.otp-form');
+    Route::get('/tenders/{id}/applications', [\App\Http\Controllers\TenderReviewController::class, 'applications'])->name('review.applications');
+    Route::get('/tenders/{id}/compare-bids', [\App\Http\Controllers\TenderReviewController::class, 'compareBids'])->name('review.compare-bids');
+    Route::get('/tenders/{id}/applications/{applicationId}', [\App\Http\Controllers\TenderReviewController::class, 'applicationShow'])->name('review.application-show');
+    Route::post('/applications/{applicationId}/review-comment', [\App\Http\Controllers\TenderReviewController::class, 'storeComment'])->name('review.comment.store');
+
+    // Award recommendations — sequential Purchase Committee approval + OTP sign-off.
+    // AwardRecommendationController enforces per-action authorization internally.
+    Route::get('/applications/{applicationId}/recommend', [\App\Http\Controllers\AwardRecommendationController::class, 'create'])->name('recommendations.create');
+    Route::post('/applications/{applicationId}/recommend', [\App\Http\Controllers\AwardRecommendationController::class, 'store'])->name('recommendations.store');
+    Route::get('/recommendations/{id}', [\App\Http\Controllers\AwardRecommendationController::class, 'show'])->name('recommendations.show');
+    Route::post('/recommendations/{id}/approve', [\App\Http\Controllers\AwardRecommendationController::class, 'approve'])->name('recommendations.approve');
+    Route::post('/recommendations/{id}/reject', [\App\Http\Controllers\AwardRecommendationController::class, 'reject'])->name('recommendations.reject');
+    Route::post('/recommendations/{id}/verify-otp', [\App\Http\Controllers\AwardRecommendationController::class, 'verifyOtp'])->name('recommendations.verify-otp');
+    Route::post('/recommendations/{id}/resend-otp', [\App\Http\Controllers\AwardRecommendationController::class, 'resendOtp'])->name('recommendations.resend-otp');
+});
+
 // ==================== TEST ROUTES ====================
-Route::get('/force-login/{email}', function ($email) {
-    $user = App\Models\User::where('email', $email)->first();
-    if ($user) {
-        Auth::login($user);
-        session()->regenerate();
-        
-        if ($user->hasRole('super-admin')) {
-            return redirect('/super-admin/dashboard');
-        }
-        if ($user->hasRole('admin')) {
-            return redirect('/admin/dashboard');
-        }
-        if ($user->hasRole('tender-owner')) {
-            return redirect('/tender-owner/dashboard');
-        }
-        if ($user->hasRole('vendor')) {
-            return redirect('/vendor/dashboard');
-        }
-    }
-    return "User not found: " . $email;
-});
+// SECURITY: gated to local development only — these bypass authentication entirely
+// (VAPT finding, 2026-07-03: this block was previously reachable with no environment
+// check at all, allowing anyone on the network to log in as any user, including
+// super-admin, by email alone).
+if (app()->environment('local')) {
+    Route::get('/force-login/{email}', function ($email) {
+        $user = App\Models\User::where('email', $email)->first();
+        if ($user) {
+            Auth::login($user);
+            session()->regenerate();
 
-Route::get('/check-login', function () {
-    if (auth()->check()) {
-        $user = auth()->user();
+            if ($user->hasRole('super-admin')) {
+                return redirect('/super-admin/dashboard');
+            }
+            if ($user->hasRole('admin')) {
+                return redirect('/admin/dashboard');
+            }
+            if ($user->hasRole('tender-owner')) {
+                return redirect('/tender-owner/dashboard');
+            }
+            if ($user->hasRole('vendor')) {
+                return redirect('/vendor/dashboard');
+            }
+        }
+        return "User not found: " . $email;
+    });
+
+    Route::get('/check-login', function () {
+        if (auth()->check()) {
+            $user = auth()->user();
+            return [
+                'status' => 'Logged in',
+                'name' => $user->name,
+                'email' => $user->email,
+                'roles' => $user->getRoleNames(),
+                'vendor_status' => $user->vendor ? $user->vendor->status : null,
+            ];
+        }
+        return ['status' => 'Not logged in'];
+    });
+
+    Route::get('/debug-session', function () {
         return [
-            'status' => 'Logged in',
-            'name' => $user->name,
-            'email' => $user->email,
-            'roles' => $user->getRoleNames(),
-            'vendor_status' => $user->vendor ? $user->vendor->status : null,
+            'session_id' => session()->getId(),
+            'session_driver' => config('session.driver'),
+            'auth_check' => auth()->check(),
+            'user' => auth()->user() ? auth()->user()->email : null,
         ];
-    }
-    return ['status' => 'Not logged in'];
-});
-
-Route::get('/debug-session', function () {
-    return [
-        'session_id' => session()->getId(),
-        'session_driver' => config('session.driver'),
-        'auth_check' => auth()->check(),
-        'user' => auth()->user() ? auth()->user()->email : null,
-    ];
-});
+    });
+}
 
 // ==================== PUBLIC TENDER API ====================
 // No authentication — consumed by external website (vmrfdu.edu.in)
@@ -468,6 +607,12 @@ Route::prefix('api/public')->name('api.public.')->middleware('throttle:120,1')->
     Route::options('/tenders/{id}',         fn() => response('', 204)->header('Access-Control-Allow-Origin', '*'));
     Route::options('/university/tenders',   fn() => response('', 204)->header('Access-Control-Allow-Origin', '*'));
 });
+
+// ==================== SHARED NOTIFICATION ====================
+Route::middleware('auth')->post('/my/notifications/mark-all-read', function () {
+    auth()->user()->unreadNotifications->markAsRead();
+    return response()->json(['success' => true]);
+})->name('my.notifications.mark-all-read');
 
 // ==================== FALLBACK ====================
 Route::fallback(function () {

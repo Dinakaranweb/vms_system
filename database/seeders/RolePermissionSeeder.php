@@ -90,6 +90,20 @@ class RolePermissionSeeder extends Seeder
             'manage users',
         ];
 
+        // Management (oversight) Permissions
+        $managementPermissions = [
+            'view all tenders',
+            'raise tender queries',
+        ];
+
+        // Purchase Committee Permissions
+        $purchaseCommitteePermissions = [
+            'open tenders',
+            'review award recommendations',
+            'approve award recommendations',
+            'enter postal bid data',
+        ];
+
         // Merge all permissions
         $allPermissions = array_merge(
             $documentPermissions,
@@ -99,7 +113,9 @@ class RolePermissionSeeder extends Seeder
             $vendorPermissions,
             $committeePermissions,
             $reportPermissions,
-            $userPermissions
+            $userPermissions,
+            $managementPermissions,
+            $purchaseCommitteePermissions
         );
 
         // Create permissions
@@ -179,6 +195,23 @@ class RolePermissionSeeder extends Seeder
             'sign contracts',
         ]);
 
+        // Management Role - University leadership (VC / Pro-VC / Registrar / Finance Officer):
+        // read-only oversight of all published/closed tenders, can raise queries seen by Super Admin & Tender Owner
+        $managementRole = Role::firstOrCreate(['name' => 'management', 'guard_name' => 'web']);
+        $managementRole->syncPermissions([
+            'view all tenders',
+            'raise tender queries',
+        ]);
+
+        // Purchase Committee Role - reviews & sequentially approves vendor awards after bid opening
+        $purchaseCommitteeRole = Role::firstOrCreate(['name' => 'purchase-committee', 'guard_name' => 'web']);
+        $purchaseCommitteeRole->syncPermissions([
+            'open tenders',
+            'review award recommendations',
+            'approve award recommendations',
+            'enter postal bid data',
+        ]);
+
         $this->command->info('========================================');
         $this->command->info('Roles and Permissions Created Successfully!');
         $this->command->info('========================================');
@@ -188,6 +221,8 @@ class RolePermissionSeeder extends Seeder
         $this->command->info('  - admin (Administrative Access)');
         $this->command->info('  - tender-owner (Own Tender Management)');
         $this->command->info('  - vendor (Limited Access)');
+        $this->command->info('  - management (University Leadership — Read-Only Oversight)');
+        $this->command->info('  - purchase-committee (Sequential Award Approval)');
         $this->command->info('');
         $this->command->info('To assign roles to users, use:');
         $this->command->info('  $user->assignRole(\'role-name\')');

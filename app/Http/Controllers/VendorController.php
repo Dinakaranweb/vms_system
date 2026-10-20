@@ -20,9 +20,12 @@ use App\Mail\EligibilityFailedMail;
 use App\Mail\ApplicationSubmittedVendorMail;
 use App\Mail\ApplicationSubmittedAdminMail;
 use App\Models\EligibilityFailure;
+use App\Traits\HasDashboardWidgets;
 
 class VendorController extends Controller
 {
+    use HasDashboardWidgets;
+
     // ==================== DASHBOARD ====================
 
     public function dashboard()
@@ -68,9 +71,11 @@ class VendorController extends Controller
             ];
         }
 
+        $widgetData = $this->getDashboardWidgetData();
+
         return view('vendor.dashboard', compact(
             'stats', 'openTenders', 'privateTendersAssigned',
-            'recentApplications', 'recentContracts', 'appMonthly'
+            'recentApplications', 'recentContracts', 'appMonthly', 'widgetData'
         ));
     }
 
@@ -115,7 +120,7 @@ class VendorController extends Controller
         });
 
         $type = request('type', 'online');
-        if (in_array($type, ['online', 'postal'])) {
+        if (in_array($type, ['online', 'postal', 'hybrid'])) {
             $query->where('tender_type', $type);
         }
 
@@ -138,6 +143,14 @@ class VendorController extends Controller
         }
         $hasApplied = TenderApplication::where('tender_id', $id)
             ->where('vendor_id', $vendor->id)->exists();
+
+        // Track this page view
+        \App\Models\TenderView::create([
+            'tender_id'  => $id,
+            'user_id'    => Auth::id(),
+            'ip_address' => request()->ip(),
+            'user_agent' => request()->userAgent(),
+        ]);
 
         $stats = [
             'total_applications'      => TenderApplication::where('tender_id', $id)->count(),
@@ -285,17 +298,41 @@ class VendorController extends Controller
                 ->with('error', 'You have already submitted an application for this tender.');
         }
 
+        $hasTechFile = $request->hasFile('technical_proposal_file');
+        $hasFinFile  = $request->hasFile('financial_proposal_file');
+
         $rules = [];
         // Postal tenders: bid/proposals not required (submitted physically)
         if ($tender->isPostal()) {
-            $rules['bid_amount']         = 'nullable|numeric|min:0';
-            $rules['technical_proposal'] = 'nullable|string';
-            $rules['financial_proposal'] = 'nullable|string';
+            $rules['bid_amount']                = 'nullable|numeric|min:0';
+            $rules['technical_proposal']        = 'nullable|string';
+            $rules['financial_proposal']        = 'nullable|string';
         } else {
-            $rules['bid_amount']         = ($tender->require_bid_amount    ?? true) ? 'required|numeric|min:0'  : 'nullable|numeric|min:0';
-            $rules['technical_proposal'] = ($tender->require_technical_bid ?? true) ? 'required|string'         : 'nullable|string';
-            $rules['financial_proposal'] = ($tender->require_financial_bid ?? true) ? 'required|string'         : 'nullable|string';
+            $rules['bid_amount'] = ($tender->require_bid_amount ?? true)
+                ? 'required|numeric|min:0' : 'nullable|numeric|min:0';
+
+            // Text OR file upload both satisfy the "required" constraint
+            $rules['technical_proposal']      = ($tender->require_technical_bid ?? true) && !$hasTechFile
+                ? 'required|string' : 'nullable|string';
+            $rules['technical_proposal_file'] = $hasTechFile
+                ? 'required|file|mimes:pdf,doc,docx|max:10240' : 'nullable|file';
+
+            $rules['financial_proposal']      = ($tender->require_financial_bid ?? true) && !$hasFinFile
+                ? 'required|string' : 'nullable|string';
+            $rules['financial_proposal_file'] = $hasFinFile
+                ? 'required|file|mimes:pdf,doc,docx|max:10240' : 'nullable|file';
         }
+
+        if ($request->hasFile('application_documents')) {
+            $rules['application_documents']   = 'array';
+            $rules['application_documents.*'] = 'file|mimes:pdf,doc,docx,jpg,jpeg,png|max:10240';
+        }
+        foreach ($tender->eligibilityQuestions as $question) {
+            if ($question->field_type === 'file' && $request->hasFile("eligibility_files.{$question->id}")) {
+                $rules["eligibility_files.{$question->id}"] = 'file|mimes:pdf,doc,docx,jpg,jpeg,png|max:10240';
+            }
+        }
+
         $request->validate($rules);
 
         DB::beginTransaction();
@@ -303,7 +340,7 @@ class VendorController extends Controller
             // Check eligibility: session is the primary source (set by the AJAX check endpoint).
             // Fall back to re-evaluating request data for vendors who bypass the JS flow.
             $hasDeterminingQuestions = $tender->eligibilityQuestions
-                ->filter(fn($q) => $q->determines_eligibility && !empty($q->eligible_options))
+                ->filter(fn($q) => $q->determines_eligibility)
                 ->isNotEmpty();
 
             $sessionKey  = "eligible_tender_{$tender->id}";
@@ -337,7 +374,7 @@ class VendorController extends Controller
 
             // Handle online document uploads
             $uploadedDocuments = [];
-            if ($tender->isOnline() && $request->hasFile('application_documents')) {
+            if ($tender->hasOnlineBids() && $request->hasFile('application_documents')) {
                 foreach ($request->file('application_documents') as $file) {
                     $path = $file->store('application-documents/' . $tender->id, 'public');
                     $uploadedDocuments[] = [
@@ -423,7 +460,9 @@ class VendorController extends Controller
                 \Log::error('Application owner email error: ' . $e->getMessage());
             }
 
-            if ($tender->isPostal()) {
+            // Hybrid included: the online part is submitted, but physical documents are
+            // still expected by post, so the vendor must be shown the address.
+            if ($tender->hasPostalBids()) {
                 return redirect()->route('vendor.applications')
                     ->with('success', 'Application submitted successfully! Please send your physical documents to the postal address below.')
                     ->with('postal_address', $tender->postal_address)
@@ -448,50 +487,92 @@ class VendorController extends Controller
             return true;
         }
 
-        $eligibleOptions = $question->eligible_options ?? [];
-
-        if (empty($eligibleOptions)) {
-            return true;
-        }
-
         switch ($question->field_type) {
             case 'checkbox':
-                $selected = is_array($answer) ? $answer : (json_decode($answer, true) ?? [$answer]);
-                return count(array_intersect($selected, $eligibleOptions)) > 0;
+                $vendorAnswers  = is_array($answer) ? $answer : (json_decode($answer, true) ?? (array)$answer);
+                $requiredOptions = collect($question->options ?? [])
+                    ->filter(fn($opt) => is_array($opt) ? ($opt['eligible'] ?? false) : false)
+                    ->pluck('label')
+                    ->toArray();
+                // Legacy: fall back to eligible_options if no new format present
+                if (empty($question->options) || (isset($question->options[0]) && is_string($question->options[0]))) {
+                    $eligibleOptions = $question->eligible_options ?? [];
+                    if (empty($eligibleOptions)) return true;
+                    return count(array_intersect($vendorAnswers, $eligibleOptions)) > 0;
+                }
+                return empty($requiredOptions) ||
+                       count(array_intersect($vendorAnswers, $requiredOptions)) === count($requiredOptions);
 
             case 'select':
             case 'radio':
-                return in_array($answer, $eligibleOptions);
-
-            case 'number':
-                foreach ($eligibleOptions as $condition) {
-                    if (preg_match('/^(>=|<=|>|<|=)(.+)$/', trim($condition), $m)) {
-                        $val = (float) $m[2];
-                        $num = (float) $answer;
-                        $pass = match ($m[1]) {
-                            '>='    => $num >= $val,
-                            '<='    => $num <= $val,
-                            '>'     => $num > $val,
-                            '<'     => $num < $val,
-                            default => $num == $val,
-                        };
-                        if ($pass) return true;
-                    } elseif ((float) $answer == (float) $condition) {
-                        return true;
-                    }
+                $vendorAnswer = $answer;
+                $eligibleLabels = collect($question->options ?? [])
+                    ->filter(fn($opt) => is_array($opt) ? ($opt['eligible'] ?? false) : false)
+                    ->pluck('label')
+                    ->toArray();
+                // Legacy: fall back to eligible_options if no new format present
+                if (empty($question->options) || (isset($question->options[0]) && is_string($question->options[0]))) {
+                    $eligibleOptions = $question->eligible_options ?? [];
+                    if (empty($eligibleOptions)) return true;
+                    return in_array($vendorAnswer, $eligibleOptions);
                 }
-                return false;
+                return empty($eligibleLabels) || in_array($vendorAnswer, $eligibleLabels);
 
             case 'text':
             case 'textarea':
-            case 'date':
-            default:
-                foreach ($eligibleOptions as $option) {
-                    if (strcasecmp(trim((string) $answer), trim((string) $option)) === 0) {
-                        return true;
+                $vendorAnswer = trim((string)($answer ?? ''));
+                $cond = $question->eligibility_condition ?? ['operator' => 'any'];
+                // Legacy: fall back to eligible_options if no new condition set
+                if (empty($cond) || empty($cond['operator'])) {
+                    $eligibleOptions = $question->eligible_options ?? [];
+                    if (empty($eligibleOptions)) return $vendorAnswer !== '';
+                    foreach ($eligibleOptions as $opt) {
+                        if (strcasecmp($vendorAnswer, trim((string)$opt)) === 0) return true;
                     }
+                    return false;
                 }
-                return false;
+                return match($cond['operator'] ?? 'any') {
+                    'equals'   => strtolower($vendorAnswer) === strtolower($cond['value'] ?? ''),
+                    'contains' => str_contains(strtolower($vendorAnswer), strtolower($cond['value'] ?? '')),
+                    default    => $vendorAnswer !== '',
+                };
+
+            case 'number':
+                $vendorAnswer = floatval($answer ?? 0);
+                $cond = $question->eligibility_condition ?? ['operator' => 'any'];
+                // Legacy: fall back to eligible_options if no new condition set
+                if (empty($cond) || empty($cond['operator'])) {
+                    $eligibleOptions = $question->eligible_options ?? [];
+                    if (empty($eligibleOptions)) return true;
+                    foreach ($eligibleOptions as $condition) {
+                        if (preg_match('/^(>=|<=|>|<|=)(.+)$/', trim($condition), $m)) {
+                            $val  = (float) $m[2];
+                            $pass = match ($m[1]) {
+                                '>='    => $vendorAnswer >= $val,
+                                '<='    => $vendorAnswer <= $val,
+                                '>'     => $vendorAnswer > $val,
+                                '<'     => $vendorAnswer < $val,
+                                default => $vendorAnswer == $val,
+                            };
+                            if ($pass) return true;
+                        } elseif ($vendorAnswer == (float)$condition) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+                $v  = floatval($cond['value'] ?? 0);
+                $v2 = floatval($cond['value2'] ?? 0);
+                return match($cond['operator'] ?? 'any') {
+                    'equals'  => $vendorAnswer == $v,
+                    'gte'     => $vendorAnswer >= $v,
+                    'lte'     => $vendorAnswer <= $v,
+                    'between' => $vendorAnswer >= $v && $vendorAnswer <= $v2,
+                    default   => true,
+                };
+
+            default:
+                return true;
         }
     }
 
@@ -518,7 +599,7 @@ class VendorController extends Controller
     {
         $vendor = Auth::user()->vendor;
         $application = TenderApplication::where('vendor_id', $vendor->id)
-            ->with(['tender', 'tender.documents'])->findOrFail($id);
+            ->with(['tender', 'tender.documents', 'queries.sender', 'eligibilityAnswers.question'])->findOrFail($id);
         return view('vendor.applications.show', compact('application'));
     }
 
@@ -549,8 +630,31 @@ class VendorController extends Controller
     public function contractDetails($id)
     {
         $vendor   = Auth::user()->vendor;
-        $contract = Contract::where('vendor_id', $vendor->id)->with('tender')->findOrFail($id);
-        return view('vendor.contracts.show', compact('contract'));
+        $contract = Contract::where('vendor_id', $vendor->id)
+            ->with(['tender', 'extensions'])
+            ->findOrFail($id);
+
+        $siblingContracts = $contract->application_id
+            ? Contract::where('application_id', $contract->application_id)
+                ->where('id', '!=', $contract->id)
+                ->where('vendor_id', $vendor->id)
+                ->orderBy('created_at')
+                ->get()
+            : collect();
+
+        return view('vendor.contracts.show', compact('contract', 'siblingContracts'));
+    }
+
+    public function downloadOrderPdf($id)
+    {
+        $vendor   = Auth::user()->vendor;
+        $contract = Contract::where('vendor_id', $vendor->id)->findOrFail($id);
+
+        if (empty($contract->order_items)) {
+            return back()->with('error', 'No generated order PDF available for this contract.');
+        }
+
+        return app(ContractController::class)->downloadOrderPdf($id);
     }
 
     public function signContract($id)
@@ -777,16 +881,20 @@ class VendorController extends Controller
 
     public function notifications()
     {
-        return view('vendor.notifications.index');
+        $notifications = Auth::user()->notifications()->latest()->paginate(20);
+        return view('vendor.notifications.index', compact('notifications'));
     }
 
     public function markNotificationRead($id)
     {
+        $notification = Auth::user()->notifications()->find($id);
+        if ($notification) $notification->markAsRead();
         return response()->json(['success' => true]);
     }
 
     public function markAllNotificationsRead()
     {
+        Auth::user()->unreadNotifications->markAsRead();
         return response()->json(['success' => true]);
     }
 }

@@ -115,7 +115,8 @@
     .alert-error .err-title { font-weight: 600; display: flex; align-items: center; gap: 7px; }
 
     /* ── Tender type tiles ── */
-    .type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .type-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    @media (max-width: 900px) { .type-grid { grid-template-columns: 1fr 1fr; } }
     .type-tile {
         position: relative; border: 1.5px solid var(--border);
         border-radius: var(--radius-lg); padding: 16px 18px; cursor: pointer;
@@ -134,6 +135,7 @@
     }
     .tile-icon-green { background: #dcfce7; color: var(--brand-primary); }
     .tile-icon-teal  { background: #ccfbf1; color: #0d9488; }
+    .tile-icon-purple { background: #ede9fe; color: #7c3aed; }
     .type-tile .tile-body h4 {
         font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 600;
         color: var(--text-primary); margin: 0 0 3px;
@@ -411,15 +413,53 @@
                         </div>
                     </div>
                     <div class="field">
-                        <label>Submission Deadline <span class="req">*</span></label>
+                        <label>Start Date <span class="req">*</span></label>
+                        <input type="date" name="start_date" id="toStartDate"
+                               value="{{ old('start_date') }}" required
+                               onchange="checkToAutoPublish()">
+                    </div>
+                    <div class="field">
+                        <label>End Date <span class="req">*</span></label>
                         <input type="date" name="submission_deadline"
                                value="{{ old('submission_deadline') }}" required>
                     </div>
                     <div class="field">
-                        <label>Opening Date <span class="req">*</span></label>
+                        <label>Opening Date <span style="font-size:11px;color:var(--text-muted);font-weight:400;margin-left:4px;">(Optional)</span></label>
                         <input type="date" name="opening_date"
-                               value="{{ old('opening_date') }}" required>
+                               value="{{ old('opening_date') }}">
                     </div>
+                </div>
+
+                {{-- Auto-Publish Section --}}
+                @php $toIstToday = \Carbon\Carbon::now('Asia/Kolkata')->toDateString(); @endphp
+                <div id="toAutoPublishRow" style="{{ old('start_date') && old('start_date') > $toIstToday ? '' : 'display:none;' }}margin-top:20px;padding-top:18px;border-top:1px solid var(--border);">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+                        <i class="fas fa-clock" style="color:#7c3aed;font-size:15px;"></i>
+                        <span style="font-size:13.5px;font-weight:600;color:var(--text-primary);">Scheduled Publishing</span>
+                        <span style="font-size:12px;color:var(--text-muted);">— start date is in the future</span>
+                    </div>
+                    <label style="display:flex;align-items:flex-start;gap:12px;padding:14px 18px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer;background:#faf5ff;transition:border-color .15s;" id="toAutoPublishTile">
+                        <input type="checkbox" id="toAutoPublishChk"
+                               {{ old('auto_publish') ? 'checked' : '' }}
+                               style="accent-color:#7c3aed;width:16px;height:16px;flex-shrink:0;margin-top:2px;"
+                               onchange="onToAutoPublishChange(this.checked)">
+                        <div>
+                            <div style="font-size:13.5px;font-weight:600;color:var(--text-primary);">
+                                <i class="fas fa-rocket" style="color:#7c3aed;margin-right:5px;"></i>
+                                Auto-publish this tender on the Start Date
+                            </div>
+                            <div style="font-size:12px;color:var(--text-muted);margin-top:3px;">
+                                Tender will be published automatically on the selected start date.
+                            </div>
+                            <div id="toAutoPublishBadge" style="{{ old('auto_publish') ? '' : 'display:none;' }}margin-top:8px;font-size:12px;font-weight:600;color:#7c3aed;">
+                                <i class="fas fa-check-circle" style="margin-right:4px;"></i>
+                                <span id="toAutoPublishBadgeText">Auto-publish enabled</span>
+                            </div>
+                        </div>
+                    </label>
+                    <input type="hidden" name="auto_publish" id="toAutoPublishInput" value="{{ old('auto_publish') ? '1' : '' }}">
+                    <input type="hidden" name="show_on_university" id="toShowOnUniInput" value="{{ old('show_on_university', '0') }}">
+                    <input type="hidden" name="university_description" id="toUniDescInput" value="{{ old('university_description', '') }}">
                 </div>
             </div>
 
@@ -445,6 +485,15 @@
                         <div class="tile-body">
                             <h4>Postal Tender</h4>
                             <p>Vendors download forms and submit by physical post</p>
+                        </div>
+                        <span class="check-ring"></span>
+                    </label>
+                    <label class="type-tile" id="tile-hybrid">
+                        <input type="radio" name="tender_type" value="hybrid">
+                        <div class="tile-icon tile-icon-purple"><i class="fas fa-shuffle"></i></div>
+                        <div class="tile-body">
+                            <h4>Hybrid Tender</h4>
+                            <p>Vendors submit online <em>and</em> send physical documents by post</p>
                         </div>
                         <span class="check-ring"></span>
                     </label>
@@ -538,22 +587,6 @@
                                 <i class="fas fa-signature" style="color:#0891b2;font-size:12px;"></i> Require Contract Signing
                             </div>
                             <div style="font-size:12px;color:var(--text-muted);margin-top:3px;">If unchecked, contract activates automatically after awarding (no signatures needed)</div>
-                        </div>
-                    </label>
-
-                    <label style="display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer;background:var(--surface-alt);transition:border-color .15s;"
-                           id="tile_email_to"
-                           onmouseover="this.style.borderColor='var(--brand-primary)'"
-                           onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--brand-primary)':'var(--border)'">
-                        <input type="checkbox" name="email_notifications_enabled" value="1"
-                               {{ old('email_notifications_enabled', '1') ? 'checked' : '' }}
-                               style="accent-color:var(--brand-primary);width:16px;height:16px;flex-shrink:0;margin-top:2px;"
-                               onchange="this.closest('label').style.borderColor=this.checked?'var(--brand-primary)':'var(--border)'">
-                        <div>
-                            <div style="font-size:13.5px;font-weight:600;color:var(--text-primary);display:flex;align-items:center;gap:6px;">
-                                <i class="fas fa-envelope" style="color:#d946ef;font-size:12px;"></i> Send Email Notifications
-                            </div>
-                            <div style="font-size:12px;color:var(--text-muted);margin-top:3px;">If unchecked, no emails sent for this tender</div>
                         </div>
                     </label>
 
@@ -695,6 +728,8 @@
                            {{ old('notify_vendors_on_create') ? 'checked' : '' }}
                            style="accent-color:var(--brand-primary);width:16px;height:16px;flex-shrink:0;margin-top:2px;"
                            onchange="ownerToggleNotifyOptions(this.checked)">
+                    <input type="hidden" name="email_notifications_enabled" id="toEmailSync"
+                           value="{{ old('notify_vendors_on_create') ? '1' : '' }}">
                     <div>
                         <div style="font-size:13.5px;font-weight:600;color:var(--text-primary);display:flex;align-items:center;gap:6px;">
                             <i class="fas fa-envelope" style="color:#0891b2;"></i>
@@ -789,19 +824,24 @@
 ════════════════════════════════════════ */
 let questionCount = 0;
 
+let qOptionCounters = {};
+
 function addQuestion() {
     const container = document.getElementById('questionsContainer');
     const empty = document.getElementById('emptyState');
     if (empty) empty.remove();
 
+    const i = questionCount;
+    qOptionCounters[i] = 0;
+
     const div = document.createElement('div');
     div.className = 'question-card';
-    div.setAttribute('data-id', questionCount);
+    div.setAttribute('data-id', i);
 
     div.innerHTML = `
         <div class="question-header">
             <span class="question-badge">
-                <i class="fas fa-question" style="font-size:10px;"></i> Question ${questionCount + 1}
+                <i class="fas fa-question" style="font-size:10px;"></i> Question ${i + 1}
             </span>
             <button type="button" onclick="removeQuestion(this)" class="btn-remove">
                 <i class="fas fa-trash-alt"></i> Remove
@@ -810,52 +850,67 @@ function addQuestion() {
         <div class="question-body">
             <div class="field q-full">
                 <label>Question Text <span class="req">*</span></label>
-                <input type="text" name="questions[${questionCount}][question]" required
-                       placeholder="Enter your question…">
+                <input type="text" name="questions[${i}][question]" required placeholder="Enter your question…">
             </div>
             <div class="field q-full">
                 <label>Help Text <span style="font-weight:400;color:var(--text-muted);">(optional)</span></label>
-                <textarea name="questions[${questionCount}][description]" rows="2"
-                          placeholder="Provide additional context or guidance…"></textarea>
+                <textarea name="questions[${i}][description]" rows="2" placeholder="Provide additional context or guidance…"></textarea>
             </div>
             <div class="field">
                 <label>Field Type <span class="req">*</span></label>
-                <select name="questions[${questionCount}][field_type]"
-                        onchange="toggleOptions(this, ${questionCount})" required>
+                <select name="questions[${i}][field_type]" onchange="onQTypeChange(this, ${i})" required>
+                    <option value="" disabled selected>— Select field type —</option>
                     <option value="text">Short Text</option>
-                    <option value="textarea">Paragraph Text</option>
-                    <option value="select">Dropdown Select</option>
-                    <option value="radio">Radio Buttons</option>
-                    <option value="checkbox">Checkboxes</option>
                     <option value="number">Number</option>
-                    <option value="date">Date</option>
+                    <option value="select">Dropdown (Select)</option>
+                    <option value="radio">Radio (Single Choice)</option>
+                    <option value="checkbox">Checkbox (Multi Choice)</option>
                     <option value="file">File Upload</option>
                 </select>
             </div>
+            <div id="file_size_${i}" class="field sub-field">
+                <label>Max File Size (KB)</label>
+                <input type="number" name="questions[${i}][max_size]" value="5120">
+            </div>
+            <div id="qOptionsSection_${i}" class="q-full" style="display:none;margin-top:6px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                    <label style="font-size:12px;font-weight:600;color:#475569;text-transform:uppercase;">Options</label>
+                    <span id="qOptionsHint_${i}" style="font-size:11px;color:#94a3b8;"></span>
+                </div>
+                <div id="qOptionsList_${i}" style="display:flex;flex-direction:column;gap:6px;"></div>
+                <button type="button" onclick="addOption(${i})"
+                    style="margin-top:8px;font-size:12px;padding:6px 14px;border:1.5px dashed #cbd5e1;border-radius:8px;background:transparent;color:#64748b;cursor:pointer;width:100%;display:flex;align-items:center;justify-content:center;gap:6px;">
+                    <i class="fas fa-plus-circle"></i> Add Option
+                </button>
+            </div>
+            <div id="qConditionSection_${i}" class="q-full" style="display:none;margin-top:6px;">
+                <label style="font-size:12px;font-weight:600;color:#475569;text-transform:uppercase;display:block;margin-bottom:8px;">Eligibility Condition</label>
+                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                    <select name="questions[${i}][eligibility_condition][operator]" id="qCondOp_${i}"
+                            style="padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;"
+                            onchange="onCondOperatorChange(${i})">
+                        <option value="any">Any answer passes</option>
+                        <option value="equals">Must equal</option>
+                        <option value="contains">Must contain</option>
+                        <option value="gte">Must be ≥</option>
+                        <option value="lte">Must be ≤</option>
+                        <option value="between">Must be between</option>
+                    </select>
+                    <input type="text" name="questions[${i}][eligibility_condition][value]" id="qCondVal_${i}"
+                           placeholder="value" style="display:none;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;width:100px;">
+                    <span id="qCondAnd_${i}" style="display:none;font-size:13px;color:#64748b;">and</span>
+                    <input type="text" name="questions[${i}][eligibility_condition][value2]" id="qCondVal2_${i}"
+                           placeholder="value" style="display:none;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;width:100px;">
+                </div>
+            </div>
             <div class="required-toggle">
-                <input type="checkbox" name="questions[${questionCount}][is_required]" value="1" checked
-                       id="req_${questionCount}">
+                <input type="checkbox" name="questions[${i}][is_required]" value="1" checked id="req_${i}">
                 <span>Mark as required</span>
             </div>
-            <div class="required-toggle">
-                <input type="checkbox" name="questions[${questionCount}][determines_eligibility]" value="1"
-                       id="elig_${questionCount}" onchange="toggleDeterminesEligibility(this, ${questionCount})">
+            <div class="required-toggle" id="qDeterminesTile_${i}">
+                <input type="checkbox" name="questions[${i}][determines_eligibility]" value="1" id="qDetermines_${i}"
+                       onchange="onDeterminesChange(this, ${i})">
                 <span>Determines eligibility</span>
-            </div>
-            <div id="options_${questionCount}" class="field sub-field q-full">
-                <label>Options <span style="font-weight:400;color:var(--text-muted);">(comma separated)</span></label>
-                <input type="text" name="questions[${questionCount}][options]"
-                       placeholder="Option A, Option B, Option C">
-            </div>
-            <div id="eligible_options_${questionCount}" class="field sub-field q-full" style="display:none;">
-                <label>Eligible Options <span style="font-weight:400;color:var(--text-muted);">(comma separated)</span></label>
-                <input type="text" name="questions[${questionCount}][eligible_options]"
-                       placeholder="Option A, Option C">
-                <p class="hint">Only enter options that qualify the vendor as eligible.</p>
-            </div>
-            <div id="file_size_${questionCount}" class="field sub-field">
-                <label>Max File Size (KB)</label>
-                <input type="number" name="questions[${questionCount}][max_size]" value="5120">
             </div>
         </div>
     `;
@@ -876,38 +931,109 @@ function removeQuestion(btn) {
     }
 }
 
-function toggleOptions(select, index) {
-    const type = select.value;
-    const optEl  = document.getElementById(`options_${index}`);
-    const fileEl = document.getElementById(`file_size_${index}`);
-    const eligEl = document.getElementById(`eligible_options_${index}`);
-    const chk    = document.getElementById(`elig_${index}`);
-    const isOpt  = ['select','radio','checkbox'].includes(type);
-    if (optEl)  optEl.classList.toggle('visible', isOpt);
+function onQTypeChange(sel, qi) {
+    const type = sel.value;
+    const optSec = document.getElementById('qOptionsSection_' + qi);
+    const condSec = document.getElementById('qConditionSection_' + qi);
+    const hint = document.getElementById('qOptionsHint_' + qi);
+    const fileEl = document.getElementById('file_size_' + qi);
     if (fileEl) fileEl.classList.toggle('visible', type === 'file');
-    if (chk) {
-        chk.disabled = !isOpt;
-        if (!isOpt) chk.checked = false;
-        chk.closest('.required-toggle').style.opacity = isOpt ? '1' : '0.4';
+    if (['select','radio','checkbox'].includes(type)) {
+        optSec.style.display = '';
+        hint.textContent = type === 'checkbox'
+            ? 'Mark "Required" = vendor MUST tick this option to pass eligibility'
+            : 'Mark "Eligible" = selecting this option passes eligibility';
+        if (!qOptionCounters[qi]) { qOptionCounters[qi] = 0; }
+        if (document.getElementById('qOptionsList_' + qi).children.length === 0) { addOption(qi); }
+    } else {
+        optSec.style.display = 'none';
     }
-    if (eligEl) {
-        eligEl.style.display = (isOpt && chk && chk.checked) ? 'block' : 'none';
+    const determinesChk = document.getElementById('qDetermines_' + qi);
+    if (['text','number'].includes(type) && determinesChk && determinesChk.checked) {
+        condSec.style.display = '';
+        updateCondOperators(qi, type);
+    } else {
+        condSec.style.display = 'none';
     }
 }
 
-function toggleDeterminesEligibility(checkbox, index) {
-    const eligEl = document.getElementById(`eligible_options_${index}`);
-    if (!eligEl) return;
-    const sel = document.querySelector(`select[name="questions[${index}][field_type]"]`);
-    const isOpt = sel && ['select','radio','checkbox'].includes(sel.value);
-    eligEl.style.display = (checkbox.checked && isOpt) ? 'block' : 'none';
+function onDeterminesChange(chk, qi) {
+    const typeEl = chk.closest('.question-body').querySelector('select[name*="[field_type]"]');
+    const type = typeEl ? typeEl.value : '';
+    const condSec = document.getElementById('qConditionSection_' + qi);
+    if (chk.checked && ['text','number'].includes(type)) {
+        condSec.style.display = '';
+        updateCondOperators(qi, type);
+    } else {
+        condSec.style.display = 'none';
+    }
+}
+
+function updateCondOperators(qi, type) {
+    const sel = document.getElementById('qCondOp_' + qi);
+    if (!sel) return;
+    const numOnly = ['gte','lte','between'];
+    Array.from(sel.options).forEach(opt => {
+        if (type === 'text' && numOnly.includes(opt.value)) {
+            opt.style.display = 'none';
+            if (opt.selected) sel.value = 'any';
+        } else {
+            opt.style.display = '';
+        }
+    });
+    onCondOperatorChange(qi);
+}
+
+function onCondOperatorChange(qi) {
+    const op = document.getElementById('qCondOp_' + qi) ? document.getElementById('qCondOp_' + qi).value : 'any';
+    const val = document.getElementById('qCondVal_' + qi);
+    const and = document.getElementById('qCondAnd_' + qi);
+    const val2 = document.getElementById('qCondVal2_' + qi);
+    const showVal = op && op !== 'any';
+    const showVal2 = op === 'between';
+    if (val)  val.style.display  = showVal  ? '' : 'none';
+    if (and)  and.style.display  = showVal2 ? '' : 'none';
+    if (val2) val2.style.display = showVal2 ? '' : 'none';
+}
+
+function addOption(qi) {
+    if (qOptionCounters[qi] === undefined) qOptionCounters[qi] = 0;
+    const oi = qOptionCounters[qi]++;
+    const list = document.getElementById('qOptionsList_' + qi);
+    const typeEl = list.closest('.question-body').querySelector('select[name*="[field_type]"]');
+    const type = typeEl ? typeEl.value : 'select';
+    const eligLabel = type === 'checkbox' ? 'Required' : 'Eligible';
+    const row = document.createElement('div');
+    row.id = 'qOpt_' + qi + '_' + oi;
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;';
+    row.innerHTML = `
+        <i class="fas fa-grip-vertical" style="color:#cbd5e1;font-size:12px;"></i>
+        <input type="text" name="questions[${qi}][options][${oi}][label]" placeholder="Option text…"
+               style="flex:1;border:1.5px solid #e2e8f0;border-radius:6px;padding:6px 10px;font-size:13px;outline:none;"
+               onfocus="this.style.borderColor='#93c5fd'" onblur="this.style.borderColor='#e2e8f0'">
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:#475569;white-space:nowrap;cursor:pointer;">
+            <input type="checkbox" name="questions[${qi}][options][${oi}][eligible]" value="1"
+                   style="accent-color:#16a34a;width:14px;height:14px;">
+            ${eligLabel}
+        </label>
+        <button type="button" onclick="removeOption('qOpt_${qi}_${oi}')"
+                style="width:24px;height:24px;border-radius:50%;background:#fee2e2;border:none;color:#dc2626;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;">
+            <i class="fas fa-times"></i>
+        </button>`;
+    list.appendChild(row);
+}
+
+function removeOption(id) {
+    const el = document.getElementById(id);
+    if (el) el.remove();
 }
 
 document.querySelectorAll('input[name="tender_type"]').forEach(radio => {
     radio.addEventListener('change', function () {
         document.querySelectorAll('.type-tile').forEach(t => t.classList.remove('selected'));
         this.closest('.type-tile').classList.add('selected');
-        document.getElementById('postalBox').classList.toggle('visible', this.value === 'postal');
+        /* Hybrid still collects physical documents, so it needs the postal details too. */
+        document.getElementById('postalBox').classList.toggle('visible', this.value === 'postal' || this.value === 'hybrid');
     });
 });
 
@@ -988,6 +1114,10 @@ function updateOwnerPrivateIds() {
 
 function ownerToggleNotifyOptions(show) {
     document.getElementById('ownerNotifyOptions').style.display = show ? '' : 'none';
+    const tile = document.getElementById('ownerNotifyToggleTile');
+    if (tile) tile.style.borderColor = show ? 'var(--brand-primary)' : 'var(--border)';
+    const sync = document.getElementById('toEmailSync');
+    if (sync) sync.value = show ? '1' : '';
 }
 function ownerToggleSpecificVendors(show) {
     document.getElementById('ownerSpecificVendorsBox').style.display = show ? '' : 'none';
@@ -1017,5 +1147,108 @@ function ownerUpdateNotifyVendorIds() {
     const ids = [...document.querySelectorAll('#ownerNotifyVendorCheckboxList input[type="checkbox"]:checked')].map(c => c.value);
     document.getElementById('ownerNotifySpecificVendorsInput').value = ids.join(',');
 }
+
+/* ── Auto-publish (tender-owner create) ── */
+const _toIstToday = "{{ \Carbon\Carbon::now('Asia/Kolkata')->toDateString() }}";
+
+function checkToAutoPublish() {
+    const d = document.getElementById('toStartDate').value;
+    const row = document.getElementById('toAutoPublishRow');
+    if (d && d > _toIstToday) {
+        row.style.display = '';
+    } else {
+        row.style.display = 'none';
+        document.getElementById('toAutoPublishChk').checked = false;
+        document.getElementById('toAutoPublishInput').value = '';
+        document.getElementById('toShowOnUniInput').value = '0';
+        document.getElementById('toUniDescInput').value = '';
+        document.getElementById('toAutoPublishBadge').style.display = 'none';
+        document.getElementById('toAutoPublishTile').style.borderColor = 'var(--border)';
+    }
+}
+
+function onToAutoPublishChange(checked) {
+    if (checked) {
+        const showUni = document.getElementById('toShowOnUniInput').value === '1';
+        document.getElementById('toApModalUniChk').checked = showUni;
+        document.getElementById('toApModalDescWrap').style.display = showUni ? '' : 'none';
+        document.getElementById('toApModalDesc').value = document.getElementById('toUniDescInput').value;
+        document.getElementById('toAutoPublishModal').style.display = 'flex';
+    } else {
+        document.getElementById('toAutoPublishInput').value = '';
+        document.getElementById('toShowOnUniInput').value = '0';
+        document.getElementById('toUniDescInput').value = '';
+        document.getElementById('toAutoPublishBadge').style.display = 'none';
+        document.getElementById('toAutoPublishTile').style.borderColor = 'var(--border)';
+    }
+}
+
+function confirmToAutoPublishModal() {
+    const showUni = document.getElementById('toApModalUniChk').checked;
+    const desc = document.getElementById('toApModalDesc').value.trim();
+    document.getElementById('toAutoPublishInput').value = '1';
+    document.getElementById('toShowOnUniInput').value = showUni ? '1' : '0';
+    document.getElementById('toUniDescInput').value = desc;
+    document.getElementById('toAutoPublishModal').style.display = 'none';
+    const badgeTxt = document.getElementById('toAutoPublishBadgeText');
+    if (badgeTxt) badgeTxt.textContent = showUni ? 'Auto-publish enabled • Show on university website' : 'Auto-publish enabled';
+    document.getElementById('toAutoPublishBadge').style.display = '';
+    document.getElementById('toAutoPublishTile').style.borderColor = '#7c3aed';
+}
+
+function cancelToAutoPublishModal() {
+    document.getElementById('toAutoPublishChk').checked = false;
+    document.getElementById('toAutoPublishInput').value = '';
+    document.getElementById('toShowOnUniInput').value = '0';
+    document.getElementById('toUniDescInput').value = '';
+    document.getElementById('toAutoPublishModal').style.display = 'none';
+    document.getElementById('toAutoPublishBadge').style.display = 'none';
+    document.getElementById('toAutoPublishTile').style.borderColor = 'var(--border)';
+}
 </script>
+
+{{-- ── Auto-Publish Modal (tender-owner create) ── --}}
+<div id="toAutoPublishModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:14px;max-width:520px;width:90%;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.25);">
+        <div style="background:linear-gradient(135deg,#7c3aed,#4f46e5);padding:20px 24px;display:flex;align-items:center;justify-content:space-between;">
+            <span style="color:#fff;font-size:16px;font-weight:700;display:flex;align-items:center;gap:8px;">
+                <i class="fas fa-rocket"></i> Auto-Publish Settings
+            </span>
+            <button type="button" onclick="cancelToAutoPublishModal()" style="background:none;border:none;color:rgba(255,255,255,.8);font-size:18px;cursor:pointer;line-height:1;">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div style="padding:24px;">
+            <p style="font-size:13.5px;color:#475569;margin:0 0 20px;">This tender will be automatically published on the selected start date. Configure university website display below.</p>
+            <div style="border:1.5px solid #e2e8f0;border-radius:10px;padding:16px;background:#f8fafc;margin-bottom:20px;">
+                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+                    <input type="checkbox" id="toApModalUniChk"
+                           style="width:17px;height:17px;accent-color:#2563eb;flex-shrink:0;"
+                           onchange="document.getElementById('toApModalDescWrap').style.display=this.checked?'':'none'">
+                    <div>
+                        <span style="font-size:13.5px;font-weight:600;color:#1e293b;">Show on University Website</span>
+                        <p style="font-size:12px;color:#64748b;margin:2px 0 0;">Tick to display this tender on the university portal via API.</p>
+                    </div>
+                </label>
+                <div id="toApModalDescWrap" style="display:none;margin-top:14px;">
+                    <label style="font-size:12px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px;">University Description</label>
+                    <textarea id="toApModalDesc" rows="4"
+                              style="width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:9px 12px;font-size:13.5px;font-family:inherit;resize:vertical;outline:none;box-sizing:border-box;"
+                              onfocus="this.style.borderColor='#93c5fd'" onblur="this.style.borderColor='#e2e8f0'"
+                              placeholder="Brief description for the university website…"></textarea>
+                </div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:10px;">
+                <button type="button" onclick="cancelToAutoPublishModal()"
+                        style="font-size:13.5px;font-weight:500;padding:9px 20px;border:1.5px solid #e2e8f0;border-radius:8px;background:#fff;color:#475569;cursor:pointer;">
+                    Cancel
+                </button>
+                <button type="button" onclick="confirmToAutoPublishModal()"
+                        style="font-size:14px;font-weight:700;padding:10px 26px;border:none;border-radius:8px;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;cursor:pointer;display:inline-flex;align-items:center;gap:8px;">
+                    <i class="fas fa-check"></i> Confirm
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 @endsection

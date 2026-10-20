@@ -66,10 +66,12 @@
                         @endif
                     </p>
                 </div>
+                @if($tender->opening_date)
                 <div>
                     <label class="text-sm text-gray-500">Opening Date</label>
-                    <p class="font-medium text-gray-900">{{ $tender->opening_date ? date('d M, Y', strtotime($tender->opening_date)) : 'N/A' }}</p>
+                    <p class="font-medium text-gray-900">{{ date('d M, Y', strtotime($tender->opening_date)) }}</p>
                 </div>
+                @endif
                 <div>
                     <label class="text-sm text-gray-500">Created By</label>
                     <p class="font-medium text-gray-900">{{ $tender->creator->name ?? 'N/A' }}</p>
@@ -119,7 +121,8 @@
                             <div class="mt-2 text-xs text-gray-500">
                                 <span class="px-2 py-1 bg-gray-100 rounded-full">Type: {{ ucfirst(str_replace('_', ' ', $question->field_type)) }}</span>
                                 @if(in_array($question->field_type, ['select', 'radio', 'checkbox']) && $question->options)
-                                    <span class="px-2 py-1 bg-gray-100 rounded-full ml-2">Options: {{ is_array($question->options) ? implode(', ', $question->options) : $question->options }}</span>
+                                    @php $optLabels = collect($question->options)->map(fn($o) => is_array($o) ? ($o['label'] ?? '') : (string)$o)->filter()->join(', '); @endphp
+                                    <span class="px-2 py-1 bg-gray-100 rounded-full ml-2">Options: {{ $optLabels }}</span>
                                 @endif
                             </div>
                         </div>

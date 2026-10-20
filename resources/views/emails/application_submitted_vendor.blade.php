@@ -48,10 +48,16 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#f4f6f9;margin:0;padding
             <div class="row"><strong>Submitted On</strong><span>{{ $application->submitted_at?->format('d M Y, h:i A') ?? now()->format('d M Y, h:i A') }}</span></div>
         </div>
 
-        @if($application->tender->isPostal())
+        @if($application->tender->hasPostalBids())
         <div class="postal-box">
             <p><strong>📬 Postal Submission Required</strong></p>
-            <p>This is a <strong>Postal Tender</strong>. You must also physically mail your application documents to the address below within 7 days:</p>
+            <p>This is a <strong>Postal Tender</strong>. You must also physically mail your application documents to the address below
+            @if($application->tender->postal_receipt_deadline)
+                by <strong>{{ $application->tender->postal_receipt_deadline->format('d M Y') }}</strong>:
+            @else
+                before the submission deadline (<strong>{{ $application->tender->submission_deadline->format('d M Y') }}</strong>):
+            @endif
+            </p>
             <p style="margin-top:10px;font-size:14px;font-weight:600;color:#1e293b">{{ $application->tender->postal_address }}</p>
             @if($application->tender->contact_person)
             <p style="margin-top:6px;font-size:13px">Contact Person: <strong>{{ $application->tender->contact_person }}</strong>

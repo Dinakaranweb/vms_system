@@ -45,7 +45,9 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#f4f6f9;margin:0;padding
             <div class="row"><strong>EMD Amount</strong><span>₹{{ number_format($tender->emda_amount, 2) }}</span></div>
             @endif
             <div class="row"><strong>Submission Deadline</strong><span>{{ $tender->submission_deadline?->format('d M Y') }}</span></div>
-            <div class="row"><strong>Opening Date</strong><span>{{ $tender->opening_date?->format('d M Y') }}</span></div>
+            @if($tender->opening_date)
+            <div class="row"><strong>Opening Date</strong><span>{{ $tender->opening_date->format('d M Y') }}</span></div>
+            @endif
             <div class="row"><strong>Created By</strong><span>{{ $owner->name }} ({{ $owner->email }})</span></div>
             <div class="row"><strong>Created At</strong><span>{{ $tender->created_at->format('d M Y, h:i A') }}</span></div>
             <div class="row"><strong>Status</strong><span class="badge-draft">Draft — Awaiting Publish</span></div>

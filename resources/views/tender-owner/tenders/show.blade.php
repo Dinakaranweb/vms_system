@@ -28,6 +28,29 @@
                         <i class="fas fa-lock mr-2"></i>Close Tender
                     </button>
                     @endif
+                    @if($tender->canBeOpened())
+                    <button onclick="openBidding({{ $tender->id }})" class="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition">
+                        <i class="fas fa-envelope-open-text mr-2"></i>Open Tender
+                    </button>
+                    @elseif($tender->isOpeningOtpPending())
+                    <a href="{{ route('purchase-committee.review.opening-codes', $tender->id) }}" class="bg-amber-50 text-amber-700 border border-amber-200 px-4 py-2 rounded-lg text-sm inline-flex items-center hover:bg-amber-100 transition">
+                        <i class="fas fa-hourglass-half mr-2"></i>Enter Committee Codes ({{ $tender->openingOtpsVerifiedCount() }}/{{ $tender->openingOtpsIssuedCount() }})
+                    </a>
+                    @elseif($tender->isBidOpen())
+                    <span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-2 rounded-lg text-sm inline-flex items-center">
+                        <i class="fas fa-envelope-open-text mr-2"></i>Bids opened {{ $tender->bid_opening_at->format('d M Y, h:i A') }}
+                    </span>
+                        @if($tender->hasPostalBids())
+                        <a href="{{ route('purchase-committee.received-documents.index', $tender->id) }}"
+                           class="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition text-sm inline-flex items-center">
+                            <i class="fas fa-file-arrow-up mr-2"></i>Record Received Documents
+                        </a>
+                        @endif
+                        <a href="{{ route('purchase-committee.award.finalize', $tender->id) }}"
+                           class="bg-slate-800 text-white px-4 py-2 rounded-lg hover:bg-slate-900 transition text-sm inline-flex items-center">
+                            <i class="fas fa-gavel mr-2"></i>Finalize Award
+                        </a>
+                    @endif
                     <a href="{{ route('tender-owner.dashboard') }}" class="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition">
                         <i class="fas fa-arrow-left mr-2"></i>Back
                     </a>
@@ -84,14 +107,22 @@
                     <p class="text-lg font-bold text-orange-600">₹{{ number_format($tender->emda_amount, 2) }}</p>
                 </div>
                 @endif
+                @if($tender->start_date)
                 <div>
-                    <label class="text-xs text-gray-500 uppercase">Submission Deadline</label>
+                    <label class="text-xs text-gray-500 uppercase">Start Date</label>
+                    <p class="text-gray-900">{{ $tender->start_date->format('d M, Y') }}</p>
+                </div>
+                @endif
+                <div>
+                    <label class="text-xs text-gray-500 uppercase">End Date</label>
                     <p class="text-gray-900">{{ $tender->submission_deadline ? date('d M, Y', strtotime($tender->submission_deadline)) : 'N/A' }}</p>
                 </div>
+                @if($tender->opening_date)
                 <div>
                     <label class="text-xs text-gray-500 uppercase">Opening Date</label>
-                    <p class="text-gray-900">{{ $tender->opening_date ? date('d M, Y', strtotime($tender->opening_date)) : 'N/A' }}</p>
+                    <p class="text-gray-900">{{ date('d M, Y', strtotime($tender->opening_date)) }}</p>
                 </div>
+                @endif
                 <div class="bg-gray-50 rounded-lg p-4">
                     <p class="text-xs text-gray-500 uppercase font-semibold mb-1">Created By</p>
                     <p class="text-sm font-medium text-gray-900">{{ $tender->creator->name ?? auth()->user()->name }}</p>
@@ -165,15 +196,43 @@
                                         <span class="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-semibold">Determines Eligibility</span>
                                     @endif
                                 </div>
-                                @if($q->eligible_options && count($q->eligible_options))
-                                <div class="mt-2 p-2 bg-purple-50 rounded-lg border border-purple-100">
-                                    <p class="text-xs text-purple-600 font-semibold mb-1">Eligible Answers:</p>
+                                @if(in_array($q->field_type, ['select','radio','checkbox']) && $q->options)
+                                <div class="mt-2">
                                     <div class="flex flex-wrap gap-1">
-                                        @foreach($q->eligible_options as $opt)
-                                            <span class="px-2 py-0.5 bg-purple-100 text-purple-800 rounded text-xs">{{ $opt }}</span>
+                                        @foreach($q->options as $opt)
+                                            @php
+                                                $optLabel = is_array($opt) ? ($opt['label'] ?? '') : (string)$opt;
+                                                $optEligible = is_array($opt) ? ($opt['eligible'] ?? false) : in_array($opt, $q->eligible_options ?? []);
+                                            @endphp
+                                            @if($optLabel)
+                                            <span class="px-2 py-0.5 rounded text-xs border
+                                                {{ $optEligible ? 'bg-green-50 text-green-700 border-green-200 font-semibold' : 'bg-gray-100 text-gray-600 border-gray-200' }}">
+                                                @if($optEligible)<i class="fas fa-check text-green-500 mr-0.5"></i>@endif{{ $optLabel }}
+                                            </span>
+                                            @endif
                                         @endforeach
                                     </div>
+                                    @if($q->determines_eligibility)
+                                        <p class="text-xs text-gray-400 mt-1"><i class="fas fa-info-circle mr-1"></i>Green = eligible answers</p>
+                                    @endif
                                 </div>
+                                @endif
+                                @if(in_array($q->field_type, ['text','textarea','number']) && $q->determines_eligibility && $q->eligibility_condition)
+                                @php $cond = is_array($q->eligibility_condition) ? $q->eligibility_condition : []; @endphp
+                                @if(!empty($cond['operator']))
+                                @php
+                                    $opLabel = match($cond['operator']) {
+                                        'gte' => '≥', 'lte' => '≤', 'gt' => '>', 'lt' => '<',
+                                        'eq' => '=', 'between' => 'between', default => $cond['operator']
+                                    };
+                                @endphp
+                                <div class="mt-2 p-2 bg-green-50 rounded-lg border border-green-100">
+                                    <p class="text-xs text-green-700 font-medium">
+                                        <i class="fas fa-check-circle mr-1"></i>Eligible if value is {{ $opLabel }} {{ $cond['value'] ?? '' }}
+                                        @if(($cond['operator'] ?? '') === 'between') and {{ $cond['value2'] ?? '' }} @endif
+                                    </p>
+                                </div>
+                                @endif
                                 @endif
                             </div>
                         </div>
@@ -239,6 +298,10 @@
                 </div>
             </div>
         </div>
+
+        @if($tender->owner_id === auth()->id() || auth()->user()->hasRole('super-admin'))
+            @include('partials.tender-query-thread', ['tender' => $tender])
+        @endif
     </div>
 </div>
 
@@ -280,6 +343,27 @@ function closeTender(id) {
                   location.reload();
               } else {
                   alert('Failed to close tender: ' + data.message);
+              }
+          });
+    }
+}
+
+function openBidding(id) {
+    if (confirm('Send an opening code to every active Purchase Committee member? Each member receives their code in their own login and reads it out to you in person — you then enter all of them on the next screen, and the tender opens once every code is in.')) {
+        fetch(`/tender-owner/tenders/${id}/open-bidding`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken
+            }
+        }).then(response => response.json())
+          .then(data => {
+              if (data.success) {
+                  alert(data.message);
+                  /* Straight to the screen where the officer keys in the members' codes. */
+                  window.location.href = data.redirect || window.location.href;
+              } else {
+                  alert('Failed to open bidding: ' + data.message);
               }
           });
     }

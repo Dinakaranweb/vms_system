@@ -105,7 +105,7 @@
                                     @if($question->options)
                                     <div>
                                         <span class="text-xs font-medium text-gray-500 uppercase tracking-wide">Options:</span>
-                                        <p class="text-gray-600 text-sm">{{ is_array($question->options) ? implode(', ', $question->options) : $question->options }}</p>
+                                        <p class="text-gray-600 text-sm">{{ is_array($question->options) ? collect($question->options)->map(fn($o) => is_array($o) ? ($o['label'] ?? '') : (string)$o)->filter()->join(', ') : $question->options }}</p>
                                     </div>
                                     @endif
                                     @if($question->determines_eligibility && $question->eligible_options)
@@ -150,16 +150,58 @@
                 </div>
                 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Submission Deadline *</label>
-                    <input type="date" name="submission_deadline" value="{{ old('submission_deadline', $tender->submission_deadline->format('Y-m-d')) }}" required 
-                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Start Date *</label>
+                    <input type="date" name="start_date" id="editStartDate"
+                           value="{{ old('start_date', $tender->start_date?->format('Y-m-d')) }}" required
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                           onchange="checkEditAutoPublish()">
                 </div>
-                
+
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Opening Date *</label>
-                    <input type="date" name="opening_date" value="{{ old('opening_date', $tender->opening_date->format('Y-m-d')) }}" required
+                    <label class="block text-sm font-medium text-gray-700 mb-2">End Date *</label>
+                    <input type="date" name="submission_deadline" value="{{ old('submission_deadline', $tender->submission_deadline->format('Y-m-d')) }}" required
                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Opening Date <span class="text-xs text-gray-400 font-normal">(Optional)</span></label>
+                    <input type="date" name="opening_date" value="{{ old('opening_date', $tender->opening_date?->format('Y-m-d')) }}"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+            </div>
+
+            @php $editIstToday = \Carbon\Carbon::now('Asia/Kolkata')->toDateString(); @endphp
+            @php $showEditAP = $tender->isDraft() && ($tender->auto_publish || ($tender->start_date && $tender->start_date->isFuture())); @endphp
+            <div id="editAutoPublishRow" style="{{ $showEditAP ? '' : 'display:none;' }}margin-top:20px;padding-top:18px;border-top:1px solid #e5e7eb;">
+                <div class="flex items-center gap-2 mb-3">
+                    <i class="fas fa-clock text-purple-600 text-sm"></i>
+                    <span class="text-sm font-semibold text-gray-800">Scheduled Publishing</span>
+                    <span class="text-xs text-gray-400">— start date is in the future</span>
+                </div>
+                <label class="flex items-start gap-3 p-4 border-2 rounded-lg cursor-pointer bg-purple-50 transition" id="editAutoPublishTile"
+                       style="border-color:{{ $tender->isDraft() && $tender->auto_publish ? '#7c3aed' : '#e5e7eb' }}">
+                    <input type="checkbox" id="editAutoPublishChk"
+                           {{ old('auto_publish', $tender->isDraft() ? $tender->auto_publish : false) ? 'checked' : '' }}
+                           class="mt-1 w-4 h-4 flex-shrink-0" style="accent-color:#7c3aed;"
+                           onchange="onEditAutoPublishChange(this.checked)">
+                    <div>
+                        <div class="text-sm font-semibold text-gray-900">
+                            <i class="fas fa-rocket text-purple-600 mr-1"></i>
+                            Auto-publish this tender on the Start Date
+                        </div>
+                        <div class="text-xs text-gray-500 mt-1">
+                            Tender will be published automatically on the selected start date.
+                        </div>
+                        <div id="editAutoPublishBadge" class="mt-2 text-xs font-semibold text-purple-700"
+                             style="{{ ($tender->isDraft() && $tender->auto_publish) ? '' : 'display:none;' }}">
+                            <i class="fas fa-check-circle mr-1"></i>
+                            <span id="editAutoPublishBadgeText">{{ $tender->show_on_university ? 'Auto-publish enabled • Show on university website' : 'Auto-publish enabled' }}</span>
+                        </div>
+                    </div>
+                </label>
+                <input type="hidden" name="auto_publish" id="editAutoPublishInput" value="{{ old('auto_publish', $tender->isDraft() ? ($tender->auto_publish ? '1' : '') : '') }}">
+                <input type="hidden" name="show_on_university" id="editShowOnUniInput" value="{{ old('show_on_university', $tender->show_on_university ? '1' : '0') }}">
+                <input type="hidden" name="university_description" id="editUniDescInput" value="{{ old('university_description', $tender->university_description ?? '') }}">
             </div>
 
             <!-- Tender Type -->
@@ -167,7 +209,7 @@
                 <h4 class="text-lg font-semibold text-gray-800 mb-3">
                     <i class="fas fa-paper-plane text-blue-600 mr-2"></i>Submission Type <span class="text-red-500">*</span>
                 </h4>
-                <div class="grid grid-cols-2 gap-4">
+                <div class="grid grid-cols-3 gap-4">
                     <label class="flex items-center p-4 border-2 rounded-lg cursor-pointer hover:bg-gray-50 transition
                                   {{ old('tender_type', $tender->tender_type) == 'online' ? 'border-blue-500 bg-blue-50' : 'border-gray-200' }}"
                            id="label-online" onclick="selectTenderType('online')">
@@ -196,9 +238,23 @@
                             <p class="text-xs text-gray-500 mt-1">Vendors download forms and submit by physical post</p>
                         </div>
                     </label>
+                    <label class="flex items-center p-4 border-2 rounded-lg cursor-pointer hover:bg-gray-50 transition
+                                  {{ old('tender_type', $tender->tender_type) == 'hybrid' ? 'border-blue-500 bg-blue-50' : 'border-gray-200' }}"
+                           id="label-hybrid" onclick="selectTenderType('hybrid')">
+                        <input type="radio" name="tender_type" value="hybrid" id="type-hybrid"
+                               {{ old('tender_type', $tender->tender_type) == 'hybrid' ? 'checked' : '' }}
+                               class="mr-3 accent-blue-600">
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <i class="fas fa-shuffle text-purple-600 text-lg"></i>
+                                <span class="font-semibold text-gray-800">Hybrid Tender</span>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1">Vendors submit online and send physical documents by post</p>
+                        </div>
+                    </label>
                 </div>
 
-                <div id="postalFields" class="mt-4 {{ old('tender_type', $tender->tender_type) == 'postal' ? '' : 'hidden' }}">
+                <div id="postalFields" class="mt-4 {{ in_array(old('tender_type', $tender->tender_type), ['postal', 'hybrid']) ? '' : 'hidden' }}">
                     <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">
@@ -369,19 +425,6 @@
                             <p class="text-xs text-gray-500 mt-0.5">Vendor must provide a financial proposal</p>
                         </div>
                     </label>
-                    {{-- Email Notifications --}}
-                    <label class="flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer hover:bg-gray-50 transition
-                                  {{ old('email_notifications_enabled', $tender->email_notifications_enabled ?? true) ? 'border-fuchsia-400 bg-fuchsia-50' : 'border-gray-200' }}">
-                        <input type="checkbox" name="email_notifications_enabled" value="1"
-                               {{ old('email_notifications_enabled', $tender->email_notifications_enabled ?? true) ? 'checked' : '' }}
-                               class="mt-1 w-4 h-4 accent-fuchsia-600">
-                        <div>
-                            <div class="font-semibold text-gray-800 flex items-center gap-1">
-                                <i class="fas fa-envelope text-fuchsia-600 text-sm"></i> Send Email Notifications
-                            </div>
-                            <p class="text-xs text-gray-500 mt-0.5">If unchecked, no emails triggered for this tender</p>
-                        </div>
-                    </label>
                 </div>
             </div>
 
@@ -478,6 +521,33 @@
                 </div>
             </div>
 
+            {{-- Vendor Notifications --}}
+            <div class="mt-6 pt-4 border-t">
+                <h4 class="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                    <i class="fas fa-bell text-cyan-600"></i> Vendor Notifications
+                </h4>
+
+                <label id="adminEditNotifyTile"
+                       class="flex items-start gap-3 p-4 border-2 rounded-lg cursor-pointer transition {{ old('notify_vendors_on_create', $tender->notify_vendors_on_create) ? 'border-cyan-400 bg-cyan-50' : 'border-gray-200' }}"
+                       onclick="this.style.borderColor=this.querySelector('input').checked?'#06b6d4':'#e5e7eb'; this.className=this.querySelector('input').checked?'flex items-start gap-3 p-4 border-2 rounded-lg cursor-pointer transition border-cyan-400 bg-cyan-50':'flex items-start gap-3 p-4 border-2 rounded-lg cursor-pointer transition border-gray-200'">
+                    <input type="checkbox" name="notify_vendors_on_create" value="1" id="adminEditNotifyToggle"
+                           {{ old('notify_vendors_on_create', $tender->notify_vendors_on_create) ? 'checked' : '' }}
+                           class="mt-1 w-4 h-4 accent-cyan-600 flex-shrink-0"
+                           onchange="adminEditToggleNotify(this.checked)">
+                    <input type="hidden" name="email_notifications_enabled" id="adminEditEmailSync"
+                           value="{{ old('notify_vendors_on_create', $tender->notify_vendors_on_create) ? '1' : '' }}">
+                    <div>
+                        <div class="font-semibold text-gray-800 flex items-center gap-1">
+                            <i class="fas fa-envelope text-cyan-600 text-sm"></i>
+                            Send email notification to vendors when this tender is published
+                        </div>
+                        <p class="text-xs text-gray-500 mt-0.5">
+                            If unchecked, <strong>no email will be sent</strong> to any vendor automatically on publish.
+                        </p>
+                    </div>
+                </label>
+            </div>
+
             <div class="flex justify-end space-x-3 mt-6 pt-4 border-t">
                 <a href="{{ route('admin.tenders') }}" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition">Cancel</a>
                 <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
@@ -547,24 +617,38 @@
                 </div>
             </div>
 
-            {{-- Options (for select/radio/checkbox) --}}
+            {{-- Options rows (for select/radio/checkbox) --}}
             <div id="optionsField" style="display:none;">
-                <label class="block text-sm font-semibold text-gray-700 mb-1">
-                    Options <span class="text-xs font-normal text-gray-400">(comma separated)</span>
-                </label>
-                <input type="text" id="questionOptions" placeholder="Option A, Option B, Option C"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-400"
-                    oninput="toggleOptionsFields()">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                    <label class="text-sm font-semibold text-gray-700">Options</label>
+                    <span id="modalOptionsHint" class="text-xs text-gray-400"></span>
+                </div>
+                <div id="modalOptionsList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;"></div>
+                <button type="button" onclick="modalAddOption()"
+                    style="font-size:12px;padding:6px 14px;border:1.5px dashed #cbd5e1;border-radius:8px;background:transparent;color:#64748b;cursor:pointer;width:100%;display:flex;align-items:center;justify-content:center;gap:6px;">
+                    <i class="fas fa-plus-circle"></i> Add Option
+                </button>
             </div>
 
-            {{-- Eligible Options (shown when Determines Eligibility + option field type) --}}
-            <div id="eligibleOptionsField" style="display:none;" class="bg-red-50 border border-red-200 rounded-lg p-4">
-                <label class="block text-sm font-semibold text-red-700 mb-1">
-                    Eligible Options <span class="text-xs font-normal text-red-500">(comma separated — must match options above exactly)</span>
-                </label>
-                <input type="text" id="eligibleOptions" placeholder="Option A, Option C  ← these answers qualify the vendor"
-                    class="w-full px-3 py-2 border border-red-300 rounded-lg text-sm focus:ring-2 focus:ring-red-400 bg-white">
-                <p class="text-xs text-red-500 mt-1">Only vendors who select these options will pass the eligibility check.</p>
+            {{-- Eligibility condition (for text/number when determines_eligibility is checked) --}}
+            <div id="conditionField" style="display:none;" class="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                <label class="block text-sm font-semibold text-purple-700 mb-2">Eligibility Condition</label>
+                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                    <select id="condOperator" onchange="onModalCondOpChange()"
+                        class="px-3 py-2 border border-purple-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-400">
+                        <option value="any">Any answer passes</option>
+                        <option value="equals">Must equal</option>
+                        <option value="contains">Must contain</option>
+                        <option value="gte">Must be ≥</option>
+                        <option value="lte">Must be ≤</option>
+                        <option value="between">Must be between</option>
+                    </select>
+                    <input type="text" id="condValue" placeholder="value"
+                        style="display:none;padding:8px 12px;border:1.5px solid #c4b5fd;border-radius:8px;font-size:13px;width:100px;">
+                    <span id="condAnd" style="display:none;font-size:13px;color:#64748b;">and</span>
+                    <input type="text" id="condValue2" placeholder="value"
+                        style="display:none;padding:8px 12px;border:1.5px solid #c4b5fd;border-radius:8px;font-size:13px;width:100px;">
+                </div>
             </div>
 
             {{-- File size (for file type) --}}
@@ -587,6 +671,16 @@
 </div>
 
 <script>
+function adminEditToggleNotify(show) {
+    const tile = document.getElementById('adminEditNotifyTile');
+    if (tile) {
+        tile.className = 'flex items-start gap-3 p-4 border-2 rounded-lg cursor-pointer transition ' +
+            (show ? 'border-cyan-400 bg-cyan-50' : 'border-gray-200');
+    }
+    const sync = document.getElementById('adminEditEmailSync');
+    if (sync) sync.value = show ? '1' : '';
+}
+
 // Document Management Variables
 let documentCounter = 1;
 
@@ -691,6 +785,8 @@ function updateDocumentOrder(documentId, direction) {
 
 // ==================== ELIGIBILITY QUESTIONS FUNCTIONS ====================
 
+let modalOptionCount = 0;
+
 function addEligibilityQuestion() {
     document.getElementById('eligibilityModalTitle').innerText = 'Add Eligibility Question';
     document.getElementById('editingQuestionId').value = '';
@@ -699,9 +795,10 @@ function addEligibilityQuestion() {
     document.getElementById('fieldType').value = 'text';
     document.getElementById('isRequired').checked = true;
     document.getElementById('determinesEligibility').checked = false;
-    document.getElementById('questionOptions').value = '';
-    document.getElementById('eligibleOptions').value = '';
     document.getElementById('maxFileSize').value = '5120';
+    document.getElementById('modalOptionsList').innerHTML = '';
+    document.getElementById('condOperator').value = 'any';
+    modalOptionCount = 0;
     toggleOptionsFields();
     document.getElementById('eligibilityModal').style.display = 'flex';
 }
@@ -719,14 +816,26 @@ function editEligibilityQuestion(questionId) {
                 document.getElementById('fieldType').value = q.field_type;
                 document.getElementById('isRequired').checked = !!q.is_required;
                 document.getElementById('determinesEligibility').checked = !!q.determines_eligibility;
-                document.getElementById('questionOptions').value = q.options
-                    ? (Array.isArray(q.options) ? q.options.join(', ') : q.options)
-                    : '';
-                document.getElementById('eligibleOptions').value = q.eligible_options
-                    ? (Array.isArray(q.eligible_options) ? q.eligible_options.join(', ') : q.eligible_options)
-                    : '';
                 document.getElementById('maxFileSize').value = q.max_size || 5120;
+
+                document.getElementById('modalOptionsList').innerHTML = '';
+                modalOptionCount = 0;
+                const opts = q.options || [];
+                if (Array.isArray(opts) && opts.length > 0) {
+                    opts.forEach(opt => {
+                        const label = typeof opt === 'string' ? opt : (opt.label || '');
+                        const eligible = typeof opt === 'object' ? !!(opt.eligible) : false;
+                        modalAddOptionRow(label, eligible);
+                    });
+                }
+
+                const cond = q.eligibility_condition || {};
+                document.getElementById('condOperator').value = cond.operator || 'any';
+                document.getElementById('condValue').value  = cond.value  || '';
+                document.getElementById('condValue2').value = cond.value2 || '';
+
                 toggleOptionsFields();
+                onModalCondOpChange();
                 document.getElementById('eligibilityModal').style.display = 'flex';
             }
         });
@@ -742,17 +851,76 @@ function removeEligibilityQuestion(questionId) {
 
 function toggleOptionsFields() {
     const fieldType = document.getElementById('fieldType').value;
-    const isOptionType = (fieldType === 'select' || fieldType === 'radio' || fieldType === 'checkbox');
+    const isOptionType = ['select','radio','checkbox'].includes(fieldType);
+    const isTextNum    = ['text','number'].includes(fieldType);
     const deChk = document.getElementById('determinesEligibility');
 
     document.getElementById('optionsField').style.display = isOptionType ? 'block' : 'none';
     document.getElementById('fileSizeField').style.display = fieldType === 'file' ? 'block' : 'none';
+    document.getElementById('conditionField').style.display = (isTextNum && deChk.checked) ? 'block' : 'none';
 
-    deChk.disabled = !isOptionType;
-    if (!isOptionType) deChk.checked = false;
-    deChk.closest('label').style.opacity = isOptionType ? '1' : '0.4';
+    const hint = document.getElementById('modalOptionsHint');
+    if (hint) {
+        hint.textContent = fieldType === 'checkbox'
+            ? 'Mark "Required" = vendor MUST tick this option to pass eligibility'
+            : 'Mark "Eligible" = selecting this option passes eligibility';
+    }
+    if (isTextNum) { updateModalCondOperators(fieldType); }
+    if (isOptionType && document.getElementById('modalOptionsList').children.length === 0) { modalAddOption(); }
+}
 
-    document.getElementById('eligibleOptionsField').style.display = (isOptionType && deChk.checked) ? 'block' : 'none';
+function updateModalCondOperators(type) {
+    const sel = document.getElementById('condOperator');
+    if (!sel) return;
+    const numOnly = ['gte','lte','between'];
+    Array.from(sel.options).forEach(opt => {
+        if (type === 'text' && numOnly.includes(opt.value)) {
+            opt.style.display = 'none';
+            if (opt.selected) sel.value = 'any';
+        } else { opt.style.display = ''; }
+    });
+    onModalCondOpChange();
+}
+
+function onModalCondOpChange() {
+    const op = document.getElementById('condOperator').value;
+    const val  = document.getElementById('condValue');
+    const and  = document.getElementById('condAnd');
+    const val2 = document.getElementById('condValue2');
+    const showVal  = op && op !== 'any';
+    const showVal2 = op === 'between';
+    val.style.display  = showVal  ? '' : 'none';
+    and.style.display  = showVal2 ? '' : 'none';
+    val2.style.display = showVal2 ? '' : 'none';
+}
+
+function modalAddOption() {
+    const type = document.getElementById('fieldType').value;
+    modalAddOptionRow('', false, type);
+}
+
+function modalAddOptionRow(labelVal, eligibleVal, type) {
+    if (!type) type = document.getElementById('fieldType').value;
+    const eligLabel = type === 'checkbox' ? 'Required' : 'Eligible';
+    const oi = modalOptionCount++;
+    const list = document.getElementById('modalOptionsList');
+    const row = document.createElement('div');
+    row.id = 'mOpt_' + oi;
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;';
+    row.innerHTML = `
+        <i class="fas fa-grip-vertical" style="color:#cbd5e1;font-size:12px;"></i>
+        <input type="text" class="modal-opt-label" value="${escapeHtml(labelVal)}" placeholder="Option text…"
+               style="flex:1;border:1.5px solid #e2e8f0;border-radius:6px;padding:6px 10px;font-size:13px;outline:none;">
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:#475569;white-space:nowrap;cursor:pointer;">
+            <input type="checkbox" class="modal-opt-eligible" value="1" ${eligibleVal ? 'checked' : ''}
+                   style="accent-color:#16a34a;width:14px;height:14px;">
+            ${eligLabel}
+        </label>
+        <button type="button" onclick="document.getElementById('mOpt_${oi}').remove()"
+                style="width:24px;height:24px;border-radius:50%;background:#fee2e2;border:none;color:#dc2626;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;">
+            <i class="fas fa-times"></i>
+        </button>`;
+    list.appendChild(row);
 }
 
 function saveEligibilityQuestion() {
@@ -760,16 +928,39 @@ function saveEligibilityQuestion() {
     if (!questionText) { alert('Please enter a question'); return; }
 
     const editingId = document.getElementById('editingQuestionId').value;
+    const fieldType = document.getElementById('fieldType').value;
+    const isOptionType = ['select','radio','checkbox'].includes(fieldType);
+    const isTextNum    = ['text','number'].includes(fieldType);
+    const determinesElig = document.getElementById('determinesEligibility').checked;
+
+    const options = [];
+    document.querySelectorAll('#modalOptionsList > div').forEach(row => {
+        const labelEl = row.querySelector('.modal-opt-label');
+        const eligEl  = row.querySelector('.modal-opt-eligible');
+        if (labelEl && labelEl.value.trim()) {
+            options.push({ label: labelEl.value.trim(), eligible: eligEl ? eligEl.checked : false });
+        }
+    });
+
+    let eligibility_condition = null;
+    if (isTextNum && determinesElig) {
+        const op = document.getElementById('condOperator').value;
+        eligibility_condition = {
+            operator: op,
+            value:  document.getElementById('condValue').value  || null,
+            value2: document.getElementById('condValue2').value || null,
+        };
+    }
+
     const questionData = {
-        id: editingId,
-        question: questionText,
-        description: document.getElementById('questionDescription').value,
-        field_type: document.getElementById('fieldType').value,
-        is_required: document.getElementById('isRequired').checked,
-        determines_eligibility: document.getElementById('determinesEligibility').checked,
-        options: document.getElementById('questionOptions').value,
-        eligible_options: document.getElementById('eligibleOptions').value,
-        max_size: document.getElementById('maxFileSize').value
+        question:               questionText,
+        description:            document.getElementById('questionDescription').value,
+        field_type:             fieldType,
+        is_required:            document.getElementById('isRequired').checked,
+        determines_eligibility: determinesElig,
+        options:                isOptionType ? options : null,
+        eligibility_condition:  eligibility_condition,
+        max_size:               document.getElementById('maxFileSize').value
     };
 
     if (editingId) {
@@ -798,15 +989,32 @@ function saveEligibilityQuestion() {
             ${questionData.determines_eligibility ? '<span class="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-semibold"><i class="fas fa-filter mr-0.5"></i> Determines Eligibility</span>' : ''}
         `;
 
+        let optionHiddens = '';
+        if (isOptionType && options.length > 0) {
+            options.forEach((opt, oi) => {
+                optionHiddens += `<input type="hidden" name="new_questions[${index}][options][${oi}][label]" value="${escapeHtml(opt.label)}">`;
+                if (opt.eligible) {
+                    optionHiddens += `<input type="hidden" name="new_questions[${index}][options][${oi}][eligible]" value="1">`;
+                }
+            });
+        }
+
+        let condHiddens = '';
+        if (eligibility_condition) {
+            condHiddens += `<input type="hidden" name="new_questions[${index}][eligibility_condition][operator]" value="${escapeHtml(eligibility_condition.operator || '')}">`;
+            if (eligibility_condition.value)  condHiddens += `<input type="hidden" name="new_questions[${index}][eligibility_condition][value]"  value="${escapeHtml(eligibility_condition.value)}">`;
+            if (eligibility_condition.value2) condHiddens += `<input type="hidden" name="new_questions[${index}][eligibility_condition][value2]" value="${escapeHtml(eligibility_condition.value2)}">`;
+        }
+
         div.innerHTML = `
             <input type="hidden" name="new_questions[${index}][question]" value="${escapeHtml(questionData.question)}">
             <input type="hidden" name="new_questions[${index}][description]" value="${escapeHtml(questionData.description)}">
             <input type="hidden" name="new_questions[${index}][field_type]" value="${questionData.field_type}">
             <input type="hidden" name="new_questions[${index}][is_required]" value="${questionData.is_required ? 1 : 0}">
             <input type="hidden" name="new_questions[${index}][determines_eligibility]" value="${questionData.determines_eligibility ? 1 : 0}">
-            <input type="hidden" name="new_questions[${index}][options]" value="${escapeHtml(questionData.options)}">
-            <input type="hidden" name="new_questions[${index}][eligible_options]" value="${escapeHtml(questionData.eligible_options)}">
             <input type="hidden" name="new_questions[${index}][max_size]" value="${questionData.max_size}">
+            ${optionHiddens}
+            ${condHiddens}
             <div class="flex justify-between items-start mb-3">
                 <div class="flex items-center gap-2 flex-wrap">
                     <p class="font-semibold text-gray-800">${escapeHtml(questionData.question)}</p>
@@ -818,12 +1026,7 @@ function saveEligibilityQuestion() {
             </div>
             ${questionData.description ? `<p class="text-gray-500 text-sm mb-2">${escapeHtml(questionData.description)}</p>` : ''}
             <p class="text-sm text-gray-600"><span class="font-medium">Type:</span> ${getFieldTypeLabel(questionData.field_type)}</p>
-            ${questionData.options ? `<p class="text-sm text-gray-500 mt-1"><span class="font-medium">Options:</span> ${escapeHtml(questionData.options)}</p>` : ''}
-            ${(questionData.determines_eligibility && questionData.eligible_options) ? `
-                <div class="bg-purple-50 border border-purple-200 rounded p-2 mt-2">
-                    <span class="text-xs font-medium text-purple-600 uppercase tracking-wide">Eligible Options:</span>
-                    <p class="text-purple-800 text-sm font-medium">${escapeHtml(questionData.eligible_options)}</p>
-                </div>` : ''}
+            ${(isOptionType && options.length) ? `<p class="text-sm text-gray-500 mt-1"><span class="font-medium">Options:</span> ${options.map(o=>escapeHtml(o.label)).join(', ')}</p>` : ''}
         `;
         container.appendChild(div);
     }
@@ -833,14 +1036,9 @@ function saveEligibilityQuestion() {
 
 function getFieldTypeLabel(fieldType) {
     const labels = {
-        'text': 'Short Text',
-        'textarea': 'Paragraph Text',
-        'select': 'Dropdown Select',
-        'radio': 'Radio Buttons',
-        'checkbox': 'Checkboxes',
-        'number': 'Number',
-        'date': 'Date',
-        'file': 'File Upload'
+        'text': 'Short Text', 'number': 'Number',
+        'select': 'Dropdown (Select)', 'radio': 'Radio (Single Choice)',
+        'checkbox': 'Checkbox (Multi Choice)', 'file': 'File Upload'
     };
     return labels[fieldType] || fieldType;
 }
@@ -868,25 +1066,23 @@ function editTileBorder(cb, tileId, color) {
 
 // ==================== TENDER TYPE TOGGLE ====================
 function selectTenderType(type) {
-    const labelOnline = document.getElementById('label-online');
-    const labelPostal = document.getElementById('label-postal');
+    const types = ['online', 'postal', 'hybrid'];
     const postalFields = document.getElementById('postalFields');
 
-    if (type === 'online') {
-        document.getElementById('type-online').checked = true;
-        labelOnline.classList.add('border-blue-500', 'bg-blue-50');
-        labelOnline.classList.remove('border-gray-200');
-        labelPostal.classList.remove('border-blue-500', 'bg-blue-50');
-        labelPostal.classList.add('border-gray-200');
-        postalFields.classList.add('hidden');
-    } else {
-        document.getElementById('type-postal').checked = true;
-        labelPostal.classList.add('border-blue-500', 'bg-blue-50');
-        labelPostal.classList.remove('border-gray-200');
-        labelOnline.classList.remove('border-blue-500', 'bg-blue-50');
-        labelOnline.classList.add('border-gray-200');
-        postalFields.classList.remove('hidden');
-    }
+    types.forEach(t => {
+        const label = document.getElementById('label-' + t);
+        const radio = document.getElementById('type-' + t);
+        if (!label || !radio) return;
+
+        const selected = t === type;
+        radio.checked = selected;
+        label.classList.toggle('border-blue-500', selected);
+        label.classList.toggle('bg-blue-50', selected);
+        label.classList.toggle('border-gray-200', !selected);
+    });
+
+    /* Hybrid still collects physical documents, so it needs the postal details too. */
+    postalFields.classList.toggle('hidden', type === 'online');
 }
 
 function editTogglePrivate(show) {
@@ -930,5 +1126,107 @@ function updateEditPrivateIds() {
     const ids = Array.from(document.querySelectorAll('.edit-private-cb:checked')).map(c => c.value);
     document.getElementById('editPrivateVendorsInput').value = ids.join(',');
 }
+
+/* ── Auto-publish (edit) ── */
+const _editIstToday = "{{ \Carbon\Carbon::now('Asia/Kolkata')->toDateString() }}";
+
+function checkEditAutoPublish() {
+    const d = document.getElementById('editStartDate').value;
+    const row = document.getElementById('editAutoPublishRow');
+    // Only show for draft tenders
+    if (d && d > _editIstToday) {
+        row.style.display = '';
+    } else {
+        row.style.display = 'none';
+        document.getElementById('editAutoPublishChk').checked = false;
+        document.getElementById('editAutoPublishInput').value = '';
+        document.getElementById('editAutoPublishBadge').style.display = 'none';
+        document.getElementById('editAutoPublishTile').style.borderColor = '#e5e7eb';
+    }
+}
+
+function onEditAutoPublishChange(checked) {
+    if (checked) {
+        const showUni = document.getElementById('editShowOnUniInput').value === '1';
+        document.getElementById('apEditModalUniChk').checked = showUni;
+        document.getElementById('apEditModalDescWrap').style.display = showUni ? '' : 'none';
+        document.getElementById('apEditModalDesc').value = document.getElementById('editUniDescInput').value;
+        document.getElementById('editAutoPublishModal').style.display = 'flex';
+    } else {
+        document.getElementById('editAutoPublishInput').value = '';
+        document.getElementById('editShowOnUniInput').value = '0';
+        document.getElementById('editUniDescInput').value = '';
+        document.getElementById('editAutoPublishBadge').style.display = 'none';
+        document.getElementById('editAutoPublishTile').style.borderColor = '#e5e7eb';
+    }
+}
+
+function confirmEditAutoPublishModal() {
+    const showUni = document.getElementById('apEditModalUniChk').checked;
+    const desc = document.getElementById('apEditModalDesc').value.trim();
+    document.getElementById('editAutoPublishInput').value = '1';
+    document.getElementById('editShowOnUniInput').value = showUni ? '1' : '0';
+    document.getElementById('editUniDescInput').value = desc;
+    document.getElementById('editAutoPublishModal').style.display = 'none';
+    const badgeTxt = document.getElementById('editAutoPublishBadgeText');
+    if (badgeTxt) badgeTxt.textContent = showUni ? 'Auto-publish enabled • Show on university website' : 'Auto-publish enabled';
+    document.getElementById('editAutoPublishBadge').style.display = '';
+    document.getElementById('editAutoPublishTile').style.borderColor = '#7c3aed';
+}
+
+function cancelEditAutoPublishModal() {
+    document.getElementById('editAutoPublishChk').checked = false;
+    document.getElementById('editAutoPublishInput').value = '';
+    document.getElementById('editShowOnUniInput').value = '0';
+    document.getElementById('editUniDescInput').value = '';
+    document.getElementById('editAutoPublishModal').style.display = 'none';
+    document.getElementById('editAutoPublishBadge').style.display = 'none';
+    document.getElementById('editAutoPublishTile').style.borderColor = '#e5e7eb';
+}
 </script>
+
+{{-- ── Auto-Publish Modal (edit) ── --}}
+<div id="editAutoPublishModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:14px;max-width:520px;width:90%;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.25);">
+        <div style="background:linear-gradient(135deg,#7c3aed,#4f46e5);padding:20px 24px;display:flex;align-items:center;justify-content:space-between;">
+            <span style="color:#fff;font-size:16px;font-weight:700;display:flex;align-items:center;gap:8px;">
+                <i class="fas fa-rocket"></i> Auto-Publish Settings
+            </span>
+            <button type="button" onclick="cancelEditAutoPublishModal()" style="background:none;border:none;color:rgba(255,255,255,.8);font-size:18px;cursor:pointer;line-height:1;">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div style="padding:24px;">
+            <p style="font-size:13.5px;color:#475569;margin:0 0 20px;">This tender will be automatically published on the selected start date. Configure university website display below.</p>
+            <div style="border:1.5px solid #e2e8f0;border-radius:10px;padding:16px;background:#f8fafc;margin-bottom:20px;">
+                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+                    <input type="checkbox" id="apEditModalUniChk"
+                           style="width:17px;height:17px;accent-color:#2563eb;flex-shrink:0;"
+                           onchange="document.getElementById('apEditModalDescWrap').style.display=this.checked?'':'none'">
+                    <div>
+                        <span style="font-size:13.5px;font-weight:600;color:#1e293b;">Show on University Website</span>
+                        <p style="font-size:12px;color:#64748b;margin:2px 0 0;">Tick to display this tender on the university portal via API.</p>
+                    </div>
+                </label>
+                <div id="apEditModalDescWrap" style="display:none;margin-top:14px;">
+                    <label style="font-size:12px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px;">University Description</label>
+                    <textarea id="apEditModalDesc" rows="4"
+                              style="width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:9px 12px;font-size:13.5px;font-family:inherit;resize:vertical;outline:none;box-sizing:border-box;"
+                              onfocus="this.style.borderColor='#93c5fd'" onblur="this.style.borderColor='#e2e8f0'"
+                              placeholder="Brief description for the university website…"></textarea>
+                </div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:10px;">
+                <button type="button" onclick="cancelEditAutoPublishModal()"
+                        style="font-size:13.5px;font-weight:500;padding:9px 20px;border:1.5px solid #e2e8f0;border-radius:8px;background:#fff;color:#475569;cursor:pointer;">
+                    Cancel
+                </button>
+                <button type="button" onclick="confirmEditAutoPublishModal()"
+                        style="font-size:14px;font-weight:700;padding:10px 26px;border:none;border-radius:8px;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;cursor:pointer;display:inline-flex;align-items:center;gap:8px;">
+                    <i class="fas fa-check"></i> Confirm
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 @endsection

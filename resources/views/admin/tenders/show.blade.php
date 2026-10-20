@@ -40,14 +40,22 @@
             <p class="text-gray-900">₹{{ number_format($tender->emda_amount, 2) }}</p>
         </div>
         @endif
+        @if($tender->start_date)
         <div>
-            <label class="text-xs text-gray-500 uppercase">Submission Deadline</label>
+            <label class="text-xs text-gray-500 uppercase">Start Date</label>
+            <p class="text-gray-900">{{ $tender->start_date->format('d M, Y') }}</p>
+        </div>
+        @endif
+        <div>
+            <label class="text-xs text-gray-500 uppercase">End Date</label>
             <p class="text-gray-900">{{ $tender->submission_deadline ? date('d M, Y', strtotime($tender->submission_deadline)) : 'N/A' }}</p>
         </div>
+        @if($tender->opening_date)
         <div>
             <label class="text-xs text-gray-500 uppercase">Opening Date</label>
-            <p class="text-gray-900">{{ $tender->opening_date ? date('d M, Y', strtotime($tender->opening_date)) : 'N/A' }}</p>
+            <p class="text-gray-900">{{ date('d M, Y', strtotime($tender->opening_date)) }}</p>
         </div>
+        @endif
         <div>
             <label class="text-xs text-gray-500 uppercase">Created By</label>
             <p class="text-gray-900">{{ $tender->creator->name ?? 'N/A' }}</p>
@@ -81,16 +89,52 @@
                         @if($question->description)
                             <p class="text-sm text-gray-500 ml-6 mb-2">{{ $question->description }}</p>
                         @endif
-                        <div class="ml-6 flex items-center space-x-3 text-xs text-gray-500">
-                            <span><i class="fas fa-tag mr-1"></i> {{ ucfirst(str_replace('_', ' ', $question->field_type)) }}</span>
+                        <div class="ml-6 flex flex-wrap items-center gap-2 text-xs text-gray-500 mt-1">
+                            <span class="px-2 py-0.5 bg-gray-100 rounded-full"><i class="fas fa-tag mr-1"></i>{{ ucfirst(str_replace('_', ' ', $question->field_type)) }}</span>
+                            @if($question->determines_eligibility)
+                                <span class="px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full font-medium"><i class="fas fa-shield-alt mr-1"></i>Determines Eligibility</span>
+                            @endif
                             @if(in_array($question->field_type, ['select', 'radio', 'checkbox']) && $question->options)
-                                <span><i class="fas fa-list mr-1"></i> Options: {{ is_array($question->options) ? implode(', ', $question->options) : $question->options }}</span>
+                                @php
+                                    $optParts = collect($question->options)->map(function($o) {
+                                        $label = is_array($o) ? ($o['label'] ?? '') : (string)$o;
+                                        $eligible = is_array($o) ? ($o['eligible'] ?? false) : false;
+                                        return ['label' => $label, 'eligible' => $eligible];
+                                    })->filter(fn($o) => $o['label'] !== '');
+                                @endphp
+                                <span class="px-2 py-0.5 bg-gray-100 rounded-full">
+                                    <i class="fas fa-list mr-1"></i>
+                                    @foreach($optParts as $op)
+                                        @if($op['eligible'])
+                                            <span class="text-green-700 font-medium">{{ $op['label'] }}✓</span>
+                                        @else
+                                            {{ $op['label'] }}
+                                        @endif
+                                        @if(!$loop->last), @endif
+                                    @endforeach
+                                </span>
+                            @endif
+                            @if(in_array($question->field_type, ['text','textarea','number']) && $question->determines_eligibility && $question->eligibility_condition)
+                                @php $cond = is_array($question->eligibility_condition) ? $question->eligibility_condition : []; @endphp
+                                @if(!empty($cond['operator']))
+                                    @php
+                                        $opLabel = match($cond['operator']) {
+                                            'gte' => '≥', 'lte' => '≤', 'gt' => '>', 'lt' => '<',
+                                            'eq' => '=', 'between' => 'between', default => $cond['operator']
+                                        };
+                                    @endphp
+                                    <span class="px-2 py-0.5 bg-green-50 text-green-700 border border-green-200 rounded-full">
+                                        <i class="fas fa-check-circle mr-1"></i>Eligible if {{ $opLabel }} {{ $cond['value'] ?? '' }}
+                                        @if(($cond['operator'] ?? '') === 'between') and {{ $cond['value2'] ?? '' }} @endif
+                                    </span>
+                                @endif
                             @endif
                             @if($question->field_type == 'file')
-                                <span><i class="fas fa-file-upload mr-1"></i> Max: {{ round($question->max_size / 1024, 2) }} MB</span>
+                                <span class="px-2 py-0.5 bg-gray-100 rounded-full"><i class="fas fa-file-upload mr-1"></i>Max: {{ round(($question->max_size ?? 0) / 1024, 2) }} MB</span>
                             @endif
                         </div>
                     </div>
+                    @if($tender->status === 'draft')
                     <div class="flex space-x-2">
                         <button onclick="editEligibilityQuestion({{ $question->id }})" class="text-blue-600 hover:text-blue-800" title="Edit">
                             <i class="fas fa-edit"></i>
@@ -99,15 +143,18 @@
                             <i class="fas fa-trash"></i>
                         </button>
                     </div>
+                    @endif
                 </div>
             </div>
             @endforeach
         </div>
+        @if($tender->status === 'draft')
         <div class="mt-3">
             <button onclick="addEligibilityQuestion()" class="text-purple-600 hover:text-purple-800 text-sm">
                 <i class="fas fa-plus mr-1"></i> Add New Question
             </button>
         </div>
+        @endif
     </div>
     @else
     <div class="mt-4 pt-4 border-t">
@@ -115,14 +162,18 @@
             <h4 class="font-semibold text-gray-800 mb-3">
                 <i class="fas fa-question-circle mr-2 text-purple-600"></i>Eligibility Questions
             </h4>
+            @if($tender->status === 'draft')
             <button onclick="addEligibilityQuestion()" class="text-purple-600 hover:text-purple-800 text-sm">
                 <i class="fas fa-plus mr-1"></i> Add Question
             </button>
+            @endif
         </div>
         <div class="bg-gray-50 rounded-lg p-8 text-center text-gray-500">
             <i class="fas fa-question-circle text-4xl mb-2"></i>
             <p>No eligibility questions added yet.</p>
+            @if($tender->status === 'draft')
             <p class="text-sm">Click "Add Question" to create eligibility criteria for vendors.</p>
+            @endif
         </div>
     </div>
     @endif
@@ -202,6 +253,15 @@
     </div>
     @endif
     
+    <!-- Analytics Link -->
+    @php $rp = auth()->user()->hasRole('super-admin') ? 'super-admin' : 'admin'; @endphp
+    <div class="mt-4 pt-4 border-t flex justify-end">
+        <a href="{{ route("{$rp}.tenders.analytics", $tender->id) }}"
+           class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition">
+            <i class="fas fa-chart-line"></i> View Analytics &amp; Visitor Log
+        </a>
+    </div>
+
     <!-- Applications Summary -->
     <div class="mt-4 pt-4 border-t">
         <h4 class="font-semibold text-gray-800 mb-3">Applications Summary</h4>
@@ -224,227 +284,9 @@
             </div>
         </div>
     </div>
+
+    @if(auth()->user()->hasRole('super-admin') || $tender->owner_id === auth()->id())
+        @include('partials.tender-query-thread', ['tender' => $tender])
+    @endif
 </div>
 
-<!-- Add/Edit Eligibility Question Modal -->
-<div id="eligibilityModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 overflow-y-auto" style="display: none;">
-    <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-screen overflow-y-auto m-4">
-        <div class="sticky top-0 bg-gradient-to-r from-purple-600 to-indigo-600 px-6 py-4 flex justify-between items-center">
-            <h3 class="text-xl font-bold text-white" id="eligibilityModalTitle">Add Eligibility Question</h3>
-            <button onclick="closeEligibilityModal()" class="text-white hover:text-gray-200">
-                <i class="fas fa-times text-xl"></i>
-            </button>
-        </div>
-        <div class="p-6">
-            <input type="hidden" id="editingQuestionId" value="">
-            <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Question *</label>
-                <input type="text" id="questionText" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
-            </div>
-            <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Description (Help text)</label>
-                <textarea id="questionDescription" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg"></textarea>
-            </div>
-            <div class="grid grid-cols-2 gap-4 mb-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Field Type *</label>
-                    <select id="fieldType" onchange="toggleOptionsFields()" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
-                        <option value="text">Short Text</option>
-                        <option value="textarea">Paragraph Text</option>
-                        <option value="select">Dropdown Select</option>
-                        <option value="radio">Radio Buttons</option>
-                        <option value="checkbox">Checkboxes</option>
-                        <option value="number">Number</option>
-                        <option value="date">Date</option>
-                        <option value="file">File Upload</option>
-                    </select>
-                </div>
-                <div class="flex items-center pt-6">
-                    <label class="flex items-center">
-                        <input type="checkbox" id="isRequired" checked class="mr-2"> Required
-                    </label>
-                </div>
-            </div>
-            <div id="optionsField" class="mb-4" style="display: none;">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Options (comma separated)</label>
-                <input type="text" id="questionOptions" placeholder="Option 1, Option 2, Option 3" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
-            </div>
-            <div id="fileSizeField" class="mb-4" style="display: none;">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Max File Size (KB)</label>
-                <input type="number" id="maxFileSize" value="5120" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
-            </div>
-            <div class="flex justify-end space-x-3">
-                <button onclick="closeEligibilityModal()" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
-                <button onclick="saveEligibilityQuestion()" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">Save Question</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Document View Modal -->
-<div id="documentModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 overflow-y-auto" style="display: none;">
-    <div class="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-screen overflow-y-auto m-4">
-        <div class="sticky top-0 bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 flex justify-between items-center">
-            <h3 class="text-xl font-bold text-white" id="documentModalTitle">Document Viewer</h3>
-            <button onclick="closeDocumentModal()" class="text-white hover:text-gray-200">
-                <i class="fas fa-times text-xl"></i>
-            </button>
-        </div>
-        <div id="documentViewer" class="p-6 min-h-[400px] flex items-center justify-center">
-            <!-- Document content will be loaded here -->
-        </div>
-        <div class="sticky bottom-0 bg-gray-50 border-t px-6 py-4 flex justify-end">
-            <a id="downloadDocumentBtn" href="#" download class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
-                <i class="fas fa-download mr-2"></i>Download Document
-            </a>
-            <button onclick="closeDocumentModal()" class="ml-3 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition">
-                Close
-            </button>
-        </div>
-    </div>
-</div>
-
-<script>
-function viewDocument(fileUrl, fileName) {
-    const modal = document.getElementById('documentModal');
-    const viewer = document.getElementById('documentViewer');
-    const title = document.getElementById('documentModalTitle');
-    const downloadBtn = document.getElementById('downloadDocumentBtn');
-    
-    title.textContent = fileName;
-    downloadBtn.href = fileUrl;
-    downloadBtn.download = fileName;
-    
-    const extension = fileName.split('.').pop().toLowerCase();
-    
-    if (['jpg', 'jpeg', 'png', 'gif'].includes(extension)) {
-        viewer.innerHTML = `<img src="${fileUrl}" alt="${fileName}" class="max-w-full max-h-[70vh] object-contain">`;
-    } else if (extension === 'pdf') {
-        viewer.innerHTML = `<iframe src="${fileUrl}" class="w-full h-[70vh] rounded-lg" frameborder="0"></iframe>`;
-    } else {
-        viewer.innerHTML = `
-            <div class="text-center py-12">
-                <i class="fas fa-file-alt text-6xl text-gray-400 mb-4"></i>
-                <p class="text-gray-600">Preview not available for this file type.</p>
-                <p class="text-sm text-gray-500 mt-2">Click the download button to view the document.</p>
-            </div>
-        `;
-    }
-    
-    modal.style.display = 'flex';
-}
-
-function closeDocumentModal() {
-    document.getElementById('documentModal').style.display = 'none';
-    document.getElementById('documentViewer').innerHTML = '';
-}
-
-// Close document modal when clicking outside
-document.getElementById('documentModal').addEventListener('click', function(e) {
-    if (e.target === this) {
-        closeDocumentModal();
-    }
-});
-
-// ==================== ELIGIBILITY QUESTIONS FUNCTIONS ====================
-
-function addEligibilityQuestion() {
-    document.getElementById('eligibilityModalTitle').innerText = 'Add Eligibility Question';
-    document.getElementById('editingQuestionId').value = '';
-    document.getElementById('questionText').value = '';
-    document.getElementById('questionDescription').value = '';
-    document.getElementById('fieldType').value = 'text';
-    document.getElementById('isRequired').checked = true;
-    document.getElementById('questionOptions').value = '';
-    document.getElementById('maxFileSize').value = '5120';
-    toggleOptionsFields();
-    document.getElementById('eligibilityModal').style.display = 'flex';
-}
-
-function editEligibilityQuestion(questionId) {
-    fetch(`/admin/tenders/questions/${questionId}`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                document.getElementById('eligibilityModalTitle').innerText = 'Edit Eligibility Question';
-                document.getElementById('editingQuestionId').value = questionId;
-                document.getElementById('questionText').value = data.question.question;
-                document.getElementById('questionDescription').value = data.question.description || '';
-                document.getElementById('fieldType').value = data.question.field_type;
-                document.getElementById('isRequired').checked = data.question.is_required;
-                document.getElementById('questionOptions').value = data.question.options ? (Array.isArray(data.question.options) ? data.question.options.join(', ') : data.question.options) : '';
-                document.getElementById('maxFileSize').value = data.question.max_size || 5120;
-                toggleOptionsFields();
-                document.getElementById('eligibilityModal').style.display = 'flex';
-            }
-        });
-}
-
-function removeEligibilityQuestion(questionId) {
-    if (confirm('Are you sure you want to remove this eligibility question?')) {
-        fetch(`/admin/tenders/questions/${questionId}`, {
-            method: 'DELETE',
-            headers: {
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-            }
-        }).then(response => response.json())
-          .then(data => {
-              if (data.success) {
-                  location.reload();
-              } else {
-                  alert('Failed to remove question');
-              }
-          });
-    }
-}
-
-function toggleOptionsFields() {
-    const fieldType = document.getElementById('fieldType').value;
-    const optionsField = document.getElementById('optionsField');
-    const fileSizeField = document.getElementById('fileSizeField');
-    
-    optionsField.style.display = (fieldType === 'select' || fieldType === 'radio' || fieldType === 'checkbox') ? 'block' : 'none';
-    fileSizeField.style.display = fieldType === 'file' ? 'block' : 'none';
-}
-
-function saveEligibilityQuestion() {
-    const questionText = document.getElementById('questionText').value;
-    if (!questionText) {
-        alert('Please enter a question');
-        return;
-    }
-    
-    const editingId = document.getElementById('editingQuestionId').value;
-    const questionData = {
-        question: questionText,
-        description: document.getElementById('questionDescription').value,
-        field_type: document.getElementById('fieldType').value,
-        is_required: document.getElementById('isRequired').checked,
-        options: document.getElementById('questionOptions').value,
-        max_size: document.getElementById('maxFileSize').value
-    };
-    
-    const url = editingId ? `/admin/tenders/questions/${editingId}` : `/admin/tenders/${$tender->id}/questions`;
-    const method = editingId ? 'PUT' : 'POST';
-    
-    fetch(url, {
-        method: method,
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-        },
-        body: JSON.stringify(questionData)
-    }).then(response => response.json())
-      .then(data => {
-          if (data.success) {
-              location.reload();
-          } else {
-              alert('Failed to save question: ' + data.message);
-          }
-      });
-}
-
-function closeEligibilityModal() {
-    document.getElementById('eligibilityModal').style.display = 'none';
-}
-</script>

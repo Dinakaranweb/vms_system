@@ -28,8 +28,9 @@
     </div>
     @endif
 
+    @php $rp = auth()->user()->hasRole('super-admin') ? 'super-admin' : 'admin'; @endphp
     <div class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
-        <form action="{{ route('admin.users.store') }}" method="POST" id="createUserForm">
+        <form action="{{ route($rp . '.users.store') }}" method="POST" id="createUserForm">
             @csrf
 
             {{-- Basic Info --}}
@@ -142,7 +143,7 @@
 
             {{-- Footer --}}
             <div class="flex items-center justify-end gap-3 px-6 py-4 bg-gray-50">
-                <a href="{{ route('admin.users') }}"
+                <a href="{{ route($rp . '.users') }}"
                     class="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-100 transition">
                     <i class="fas fa-arrow-left mr-1"></i> Cancel
                 </a>

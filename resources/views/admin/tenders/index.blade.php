@@ -4,6 +4,7 @@
 @section('header', 'Tender Management')
 
 @section('content')
+@php $rp = auth()->user()->hasRole('super-admin') ? 'super-admin' : 'admin'; @endphp
 
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
@@ -187,6 +188,50 @@
     letter-spacing: -.01em;
   }
   .tm-card-title i { opacity: .85; }
+
+  .tm-search-form {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .tm-search-input {
+    background: rgba(255,255,255,.15);
+    border: 1px solid rgba(255,255,255,.3);
+    color: #fff;
+    border-radius: var(--radius-sm);
+    padding: 8px 12px;
+    font-size: .85rem;
+    font-family: 'Sora', sans-serif;
+    min-width: 220px;
+  }
+  .tm-search-input::placeholder { color: rgba(255,255,255,.7); }
+  .tm-search-input:focus { outline: none; background: rgba(255,255,255,.25); }
+  .tm-search-select {
+    background: rgba(255,255,255,.15);
+    border: 1px solid rgba(255,255,255,.3);
+    color: #fff;
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+    font-size: .85rem;
+    font-family: 'Sora', sans-serif;
+  }
+  .tm-search-select option { color: var(--text-main); }
+  .tm-search-btn {
+    background: #fff;
+    color: var(--primary);
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 8px 14px;
+    font-size: .85rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .tm-search-clear {
+    color: rgba(255,255,255,.85);
+    font-size: .8rem;
+    text-decoration: underline;
+  }
 
   /* scroll wrapper for mobile */
   .tm-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -425,7 +470,7 @@
       Tender Management
       <span class="badge-live">Admin</span>
     </h2>
-    <a href="{{ route('admin.tenders.create') }}" class="tm-btn-primary">
+    <a href="{{ route($rp . '.tenders.create') }}" class="tm-btn-primary">
       <i class="fas fa-plus"></i> New Tender
     </a>
   </div>
@@ -468,6 +513,19 @@
       <span class="tm-card-title">
         <i class="fas fa-list"></i> All Tenders
       </span>
+      <form method="GET" action="{{ route($rp . '.tenders') }}" class="tm-search-form">
+        <input type="text" name="search" value="{{ request('search') }}" placeholder="Search by title or tender no…" class="tm-search-input">
+        <select name="status" class="tm-search-select">
+          <option value="">All Status</option>
+          <option value="draft" @selected(request('status') === 'draft')>Draft</option>
+          <option value="published" @selected(request('status') === 'published')>Published</option>
+          <option value="closed" @selected(request('status') === 'closed')>Closed</option>
+        </select>
+        <button type="submit" class="tm-search-btn"><i class="fas fa-search"></i> Search</button>
+        @if(request('search') || request('status'))
+        <a href="{{ route($rp . '.tenders') }}" class="tm-search-clear">Clear</a>
+        @endif
+      </form>
     </div>
 
     <div class="tm-table-scroll">
@@ -481,7 +539,7 @@
             <th>Applications</th>
             <th>Status</th>
             <th>Categories</th>
-            <th>Created</th>
+            <th>Created By</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -515,7 +573,7 @@
               @php $cats = $tender->categories; @endphp
               @if($cats->isEmpty())
                 @if($tender->status === 'draft')
-                  <a href="{{ route('admin.tenders.edit', $tender->id) }}"
+                  <a href="{{ route($rp . '.tenders.edit', $tender->id) }}"
                      class="cat-warn" title="No categories assigned — assign before publishing so vendors are notified">
                     <i class="fas fa-exclamation-triangle" style="font-size:.6rem"></i> No Category
                   </a>
@@ -539,18 +597,42 @@
                 </div>
               @endif
             </td>
-            <td>{{ $tender->created_at->format('d M, Y') }}</td>
+            <td>
+              @php
+                  $creator = $tender->creator ?? $tender->owner;
+                  $creatorRole = $creator?->getRoleNames()->first() ?? 'admin';
+                  $roleColor = match($creatorRole) {
+                      'super-admin'  => 'background:#fef3c7;color:#92400e',
+                      'tender-owner' => 'background:#ede9fe;color:#6d28d9',
+                      default        => 'background:#dbeafe;color:#1e40af',
+                  };
+              @endphp
+              @if($creator)
+              <div style="display:flex;flex-direction:column;gap:2px;">
+                  <span style="font-weight:600;font-size:.8rem;color:#1e293b;">{{ $creator->name }}</span>
+                  <span style="font-size:.68rem;padding:1px 7px;border-radius:100px;font-weight:600;width:fit-content;{{ $roleColor }}">
+                      {{ ucfirst(str_replace('-', ' ', $creatorRole)) }}
+                  </span>
+                  <span style="font-size:.7rem;color:#94a3b8;">{{ $tender->created_at->format('d M, Y') }}</span>
+              </div>
+              @else
+              <span style="color:#94a3b8;font-size:.8rem;">{{ $tender->created_at->format('d M, Y') }}</span>
+              @endif
+            </td>
             <td>
               <div class="tm-actions">
                 <button onclick="viewTender({{ $tender->id }})" class="tm-action-btn view" title="View Details">
                   <i class="fas fa-eye"></i>
                 </button>
                 @php $roleSegment = auth()->user()->hasRole('super-admin') ? 'super-admin' : 'admin'; @endphp
+                <a href="/{{ $roleSegment }}/tenders/{{ $tender->id }}/analytics" class="tm-action-btn" style="color:#0891b2;" title="View Analytics (hits &amp; visitors)">
+                  <i class="fas fa-chart-line"></i>
+                </a>
                 <a href="/{{ $roleSegment }}/tenders/{{ $tender->id }}/committee" class="tm-action-btn" style="color:#7c3aed;" title="Manage Committee">
                   <i class="fas fa-users"></i>
                 </a>
                 @if($tender->status == 'draft')
-                  <a href="{{ route('admin.tenders.edit', $tender->id) }}" class="tm-action-btn edit" title="Edit Tender">
+                  <a href="{{ route($rp . '.tenders.edit', $tender->id) }}" class="tm-action-btn edit" title="Edit Tender">
                     <i class="fas fa-edit"></i>
                   </a>
                   <button onclick="openPublishModal({{ $tender->id }})" class="tm-action-btn publish" title="Publish">
@@ -567,6 +649,30 @@
                   <button onclick="closeTender({{ $tender->id }})" class="tm-action-btn close-t" title="Close Tender">
                     <i class="fas fa-lock"></i>
                   </button>
+                @endif
+                @if($tender->canBeOpened())
+                  <button onclick="openBidding({{ $tender->id }})" class="tm-action-btn" style="color:#059669;" title="Open Tender (sends a code to each Purchase Committee member's login)">
+                    <i class="fas fa-envelope-open-text"></i>
+                  </button>
+                @elseif($tender->isOpeningOtpPending())
+                  <a href="{{ route('purchase-committee.review.opening-codes', $tender->id) }}" class="tm-action-btn" style="color:#d97706;"
+                     title="Collect committee codes — {{ $tender->openingOtpsVerifiedCount() }} of {{ $tender->openingOtpsIssuedCount() }} entered">
+                    <i class="fas fa-hourglass-half"></i>
+                  </a>
+                @elseif($tender->isBidOpen())
+                  <span class="tm-action-btn" style="color:#059669;cursor:default;" title="Bids opened {{ $tender->bid_opening_at->format('d M Y, h:i A') }}">
+                    <i class="fas fa-envelope-open"></i>
+                  </span>
+                  @if($tender->hasPostalBids())
+                  <a href="{{ route('purchase-committee.received-documents.index', $tender->id) }}" class="tm-action-btn" style="color:#0d9488;"
+                     title="Record the documents physically received for this tender">
+                    <i class="fas fa-file-arrow-up"></i>
+                  </a>
+                  @endif
+                  <a href="{{ route('purchase-committee.award.finalize', $tender->id) }}" class="tm-action-btn" style="color:#1e293b;"
+                     title="Finalize the award — record the chosen applicant and the committee discussion">
+                    <i class="fas fa-gavel"></i>
+                  </a>
                 @endif
                 <button onclick="deleteTender({{ $tender->id }})" class="tm-action-btn delete" title="Delete">
                   <i class="fas fa-trash"></i>
@@ -709,11 +815,82 @@
   </div>
 </div>
 
+{{-- ── Eligibility Question Modal ── --}}
+<div id="eligibilityModal" class="fixed inset-0 bg-black/50 items-center justify-center z-[60] overflow-y-auto" style="display:none;">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-screen overflow-y-auto m-4">
+        <div class="sticky top-0 bg-gradient-to-r from-purple-600 to-indigo-600 px-6 py-4 flex justify-between items-center">
+            <h3 class="text-xl font-bold text-white" id="eligibilityModalTitle">Add Eligibility Question</h3>
+            <button onclick="closeEligibilityModal()" class="text-white hover:text-gray-200"><i class="fas fa-times text-xl"></i></button>
+        </div>
+        <div class="p-6">
+            <input type="hidden" id="editingQuestionId" value="">
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Question *</label>
+                <input type="text" id="questionText" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+            </div>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Description (Help text)</label>
+                <textarea id="questionDescription" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg"></textarea>
+            </div>
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Field Type *</label>
+                    <select id="fieldType" onchange="toggleOptionsFields()" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                        <option value="text">Short Text</option>
+                        <option value="textarea">Paragraph Text</option>
+                        <option value="select">Dropdown Select</option>
+                        <option value="radio">Radio Buttons</option>
+                        <option value="checkbox">Checkboxes</option>
+                        <option value="number">Number</option>
+                        <option value="date">Date</option>
+                        <option value="file">File Upload</option>
+                    </select>
+                </div>
+                <div class="flex items-center pt-6">
+                    <label class="flex items-center"><input type="checkbox" id="isRequired" checked class="mr-2"> Required</label>
+                </div>
+            </div>
+            <div id="optionsField" class="mb-4" style="display:none;">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Options (comma separated)</label>
+                <input type="text" id="questionOptions" placeholder="Option 1, Option 2, Option 3" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            </div>
+            <div id="fileSizeField" class="mb-4" style="display:none;">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Max File Size (KB)</label>
+                <input type="number" id="maxFileSize" value="5120" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            </div>
+            <div class="flex justify-end space-x-3">
+                <button onclick="closeEligibilityModal()" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
+                <button onclick="saveEligibilityQuestion()" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">Save Question</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- ── Document Viewer Modal ── --}}
+<div id="documentModal" class="fixed inset-0 bg-black/50 items-center justify-center z-[60] overflow-y-auto" style="display:none;">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-screen overflow-y-auto m-4">
+        <div class="sticky top-0 bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 flex justify-between items-center">
+            <h3 class="text-xl font-bold text-white" id="documentModalTitle">Document Viewer</h3>
+            <button onclick="closeDocumentModal()" class="text-white hover:text-gray-200"><i class="fas fa-times text-xl"></i></button>
+        </div>
+        <div id="documentViewer" class="p-6 min-h-[400px] flex items-center justify-center"></div>
+        <div class="sticky bottom-0 bg-gray-50 border-t px-6 py-4 flex justify-end gap-3">
+            <a id="downloadDocumentBtn" href="#" download class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
+                <i class="fas fa-download mr-2"></i>Download
+            </a>
+            <button onclick="closeDocumentModal()" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition">Close</button>
+        </div>
+    </div>
+</div>
+
 
 <script>
 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}';
+const rolePrefix = '{{ $rp }}';
+let currentTenderId = null;
 
 function viewTender(id) {
+  currentTenderId = id;
   const overlay    = document.getElementById('viewTenderModal');
   const detailsDiv = document.getElementById('tenderDetails');
   overlay.classList.add('open');
@@ -723,7 +900,7 @@ function viewTender(id) {
       <p>Loading tender details…</p>
     </div>`;
 
-  fetch(`/admin/tenders/${id}`)
+  fetch(`/${rolePrefix}/tenders/${id}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
     .then(response => response.text())
     .then(html => { detailsDiv.innerHTML = html; })
     .catch(() => {
@@ -764,7 +941,7 @@ function confirmPublish() {
   const id       = document.getElementById('publishTenderId').value;
   const showOnUni = document.getElementById('pub_showOnUni').checked;
   const desc      = document.getElementById('pub_uniDesc').value.trim();
-  const rp        = window.location.pathname.startsWith('/super-admin/') ? 'super-admin' : 'admin';
+  const rp        = rolePrefix;
 
   if (showOnUni && !desc) {
     document.getElementById('pub_uniDesc').focus();
@@ -802,7 +979,7 @@ function saveUniversityDisplay() {
   const id        = document.getElementById('uniTenderId').value;
   const showOnUni = document.getElementById('uni_showOnUni').checked;
   const desc      = document.getElementById('uni_uniDesc').value.trim();
-  const rp        = window.location.pathname.startsWith('/super-admin/') ? 'super-admin' : 'admin';
+  const rp        = rolePrefix;
 
   if (showOnUni && !desc) {
     document.getElementById('uni_uniDesc').focus();
@@ -825,7 +1002,7 @@ function saveUniversityDisplay() {
 function closeTender(id) {
   const reason = prompt('Close this tender?\n\nEnter reason for closure (will be emailed to vendors who applied):');
   if (reason === null) return;
-  fetch(`/admin/tenders/${id}/close`, {
+  fetch(`/${rolePrefix}/tenders/${id}/close`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken },
     body: JSON.stringify({ reason: reason })
@@ -835,14 +1012,139 @@ function closeTender(id) {
   });
 }
 
+function openBidding(id) {
+  if (!confirm('Send an opening code to every active Purchase Committee member? Each member receives their code in their own login and reads it out to you in person — you then enter all of them on the next screen, and the tender opens once every code is in.')) return;
+  fetch(`/${rolePrefix}/tenders/${id}/open-bidding`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken }
+  }).then(r => r.json()).then(data => {
+    if (data.success) {
+      alert(data.message);
+      /* Straight to the screen where the officer keys in the members' codes. */
+      window.location.href = data.redirect || window.location.href;
+    }
+    else alert(data.message || 'Failed to open bidding.');
+  });
+}
+
 function deleteTender(id) {
   if (confirm('Delete this tender? This action cannot be undone.')) {
-    fetch(`/admin/tenders/${id}`, {
+    fetch(`/${rolePrefix}/tenders/${id}`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken }
     }).then(() => location.reload());
   }
 }
+
+/* ── Eligibility Question Functions ── */
+function addEligibilityQuestion() {
+    document.getElementById('eligibilityModalTitle').innerText = 'Add Eligibility Question';
+    document.getElementById('editingQuestionId').value = '';
+    document.getElementById('questionText').value = '';
+    document.getElementById('questionDescription').value = '';
+    document.getElementById('fieldType').value = 'text';
+    document.getElementById('isRequired').checked = true;
+    document.getElementById('questionOptions').value = '';
+    document.getElementById('maxFileSize').value = '5120';
+    toggleOptionsFields();
+    document.getElementById('eligibilityModal').style.display = 'flex';
+}
+
+function editEligibilityQuestion(questionId) {
+    const rp = rolePrefix;
+    fetch(`/${rp}/tenders/questions/${questionId}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('eligibilityModalTitle').innerText = 'Edit Eligibility Question';
+                document.getElementById('editingQuestionId').value = questionId;
+                document.getElementById('questionText').value = data.question.question;
+                document.getElementById('questionDescription').value = data.question.description || '';
+                document.getElementById('fieldType').value = data.question.field_type;
+                document.getElementById('isRequired').checked = data.question.is_required;
+                document.getElementById('questionOptions').value = data.question.options
+                    ? (Array.isArray(data.question.options) ? data.question.options.join(', ') : data.question.options) : '';
+                document.getElementById('maxFileSize').value = data.question.max_size || 5120;
+                toggleOptionsFields();
+                document.getElementById('eligibilityModal').style.display = 'flex';
+            }
+        });
+}
+
+function removeEligibilityQuestion(questionId) {
+    if (confirm('Are you sure you want to remove this eligibility question?')) {
+        const rp = rolePrefix;
+        fetch(`/${rp}/tenders/questions/${questionId}`, {
+            method: 'DELETE',
+            headers: { 'X-CSRF-TOKEN': csrfToken }
+        }).then(r => r.json()).then(data => {
+            if (data.success) { location.reload(); }
+            else { alert('Failed to remove question'); }
+        });
+    }
+}
+
+function toggleOptionsFields() {
+    const ft = document.getElementById('fieldType').value;
+    document.getElementById('optionsField').style.display =
+        (ft === 'select' || ft === 'radio' || ft === 'checkbox') ? 'block' : 'none';
+    document.getElementById('fileSizeField').style.display = ft === 'file' ? 'block' : 'none';
+}
+
+function saveEligibilityQuestion() {
+    const questionText = document.getElementById('questionText').value;
+    if (!questionText) { alert('Please enter a question'); return; }
+    const editingId = document.getElementById('editingQuestionId').value;
+    const rp = rolePrefix;
+    const url = editingId
+        ? `/${rp}/tenders/questions/${editingId}`
+        : `/${rp}/tenders/${currentTenderId}/questions`;
+    fetch(url, {
+        method: editingId ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken },
+        body: JSON.stringify({
+            question: questionText,
+            description: document.getElementById('questionDescription').value,
+            field_type: document.getElementById('fieldType').value,
+            is_required: document.getElementById('isRequired').checked,
+            options: document.getElementById('questionOptions').value,
+            max_size: document.getElementById('maxFileSize').value
+        })
+    }).then(r => r.json()).then(data => {
+        if (data.success) { location.reload(); }
+        else { alert('Failed to save question: ' + (data.message || '')); }
+    });
+}
+
+function closeEligibilityModal() {
+    document.getElementById('eligibilityModal').style.display = 'none';
+}
+
+/* ── Document Viewer Functions ── */
+function viewDocument(fileUrl, fileName) {
+    const modal = document.getElementById('documentModal');
+    const viewer = document.getElementById('documentViewer');
+    document.getElementById('documentModalTitle').textContent = fileName;
+    document.getElementById('downloadDocumentBtn').href = fileUrl;
+    document.getElementById('downloadDocumentBtn').download = fileName;
+    const ext = fileName.split('.').pop().toLowerCase();
+    if (['jpg','jpeg','png','gif'].includes(ext)) {
+        viewer.innerHTML = `<img src="${fileUrl}" alt="${fileName}" class="max-w-full max-h-[70vh] object-contain">`;
+    } else if (ext === 'pdf') {
+        viewer.innerHTML = `<iframe src="${fileUrl}" class="w-full h-[70vh] rounded-lg" frameborder="0"></iframe>`;
+    } else {
+        viewer.innerHTML = `<div class="text-center py-12"><i class="fas fa-file-alt text-6xl text-gray-400 mb-4"></i><p class="text-gray-600">Preview not available. Use the download button.</p></div>`;
+    }
+    modal.style.display = 'flex';
+}
+
+function closeDocumentModal() {
+    document.getElementById('documentModal').style.display = 'none';
+    document.getElementById('documentViewer').innerHTML = '';
+}
+document.getElementById('documentModal').addEventListener('click', function(e) {
+    if (e.target === this) closeDocumentModal();
+});
 </script>
 
 @endsection

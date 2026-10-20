@@ -26,7 +26,7 @@ class ApplicationController extends Controller
         $user         = auth()->user();
         $tenderId     = $request->tender_id;
         $statusFilter = $request->status;
-        $tenderType   = in_array($request->tender_type, ['online', 'postal']) ? $request->tender_type : 'online';
+        $tenderType   = in_array($request->tender_type, ['online', 'postal', 'hybrid']) ? $request->tender_type : 'online';
 
         if ($user->hasRole('super-admin') || $user->hasRole('admin')) {
             $tenders = Tender::where('tender_type', $tenderType)->orderBy('title')->get(['id', 'title', 'tender_number']);
@@ -79,7 +79,7 @@ class ApplicationController extends Controller
      */
     public function show($id)
 {
-    $application = TenderApplication::with(['tender', 'vendor', 'tender.creator', 'eligibilityAnswers.question'])->findOrFail($id);
+    $application = TenderApplication::with(['tender', 'vendor', 'tender.creator', 'eligibilityAnswers.question', 'queries.sender'])->findOrFail($id);
     
     // Check if user has access to this application
     $user = auth()->user();
@@ -99,8 +99,8 @@ class ApplicationController extends Controller
     if (request()->ajax()) {
         return view('admin.applications.show', compact('application', 'contractExists'));
     }
-    
-    return view('admin.applications.show', compact('application', 'contractExists'));
+
+    return view('admin.applications.detail', compact('application', 'contractExists'));
 }
     /**
      * Shortlist an application.
@@ -222,6 +222,21 @@ class ApplicationController extends Controller
             return redirect()->back()->with('error', 'Cannot create a partial order for this application.');
         }
 
+        if (!$isPartialOrder && ($gateReason = \App\Models\AwardRecommendation::gateBlocksAward($application))) {
+            return redirect()->back()->with('error', $gateReason);
+        }
+
+        // Block if the tender is already awarded to a different application
+        if (!$isPartialOrder) {
+            $alreadyAwarded = TenderApplication::where('tender_id', $application->tender_id)
+                ->where('status', 'awarded')
+                ->where('id', '!=', $id)
+                ->exists();
+            if ($alreadyAwarded) {
+                return redirect()->back()->with('error', 'This tender has already been awarded to another vendor. Only one award is allowed per tender.');
+            }
+        }
+
         $year      = date('Y');
         $shortYear = date('y', strtotime('+1 year'));
         $seq       = Contract::whereNotNull('order_number')->count() + 1;
@@ -268,6 +283,23 @@ class ApplicationController extends Controller
             }
             if ($isPartialOrder && !in_array($application->status, ['shortlisted', 'awarded'])) {
                 return back()->withInput()->withErrors(['general' => 'Cannot create a partial order for this application.']);
+            }
+
+            if (!$isPartialOrder && ($gateReason = \App\Models\AwardRecommendation::gateBlocksAward($application))) {
+                DB::rollBack();
+                return back()->withInput()->withErrors(['general' => $gateReason]);
+            }
+
+            // Block if the tender already has a different awarded application
+            if (!$isPartialOrder) {
+                $alreadyAwarded = TenderApplication::where('tender_id', $application->tender_id)
+                    ->where('status', 'awarded')
+                    ->where('id', '!=', $id)
+                    ->exists();
+                if ($alreadyAwarded) {
+                    DB::rollBack();
+                    return back()->withInput()->withErrors(['general' => 'This tender has already been awarded to another vendor. Only one award is allowed per tender.']);
+                }
             }
 
             // Only update application status on first award (not partial orders)

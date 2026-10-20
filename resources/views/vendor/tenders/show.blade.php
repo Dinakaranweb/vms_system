@@ -65,7 +65,7 @@
                 </div>
                 @endif
                 <div>
-                    <label class="text-sm text-gray-500">Submission Deadline</label>
+                    <label class="text-sm text-gray-500">End Date</label>
                     <p class="font-medium text-gray-900">
                         {{ $tender->submission_deadline ? date('d M, Y', strtotime($tender->submission_deadline)) : 'N/A' }}
                         @if($tender->submission_deadline && $tender->submission_deadline->isFuture())
@@ -76,8 +76,10 @@
                     </p>
                 </div>
                 <div>
+                    @if($tender->opening_date)
                     <label class="text-sm text-gray-500">Opening Date</label>
-                    <p class="font-medium text-gray-900">{{ $tender->opening_date ? date('d M, Y', strtotime($tender->opening_date)) : 'N/A' }}</p>
+                    <p class="font-medium text-gray-900">{{ date('d M, Y', strtotime($tender->opening_date)) }}</p>
+                    @endif
                 </div>
                 <div>
                     <label class="text-sm text-gray-500">Created By</label>
@@ -128,7 +130,10 @@
                             <div class="mt-2 text-xs text-gray-500">
                                 <span class="px-2 py-1 bg-gray-100 rounded-full">Type: {{ ucfirst(str_replace('_', ' ', $question->field_type)) }}</span>
                                 @if(in_array($question->field_type, ['select', 'radio', 'checkbox']) && $question->options)
-                                    <span class="px-2 py-1 bg-gray-100 rounded-full ml-2">Options: {{ is_array($question->options) ? implode(', ', $question->options) : $question->options }}</span>
+                                    @php
+                                        $optLabels = collect($question->options)->map(fn($o) => is_array($o) ? ($o['label'] ?? '') : (string)$o)->filter()->join(', ');
+                                    @endphp
+                                    <span class="px-2 py-1 bg-gray-100 rounded-full ml-2">Options: {{ $optLabels }}</span>
                                 @endif
                             </div>
                         </div>
@@ -139,13 +144,20 @@
         </div>
         @endif
 
-        <!-- Postal Address (for postal tenders) -->
-        @if($tender->tender_type == 'postal' && $tender->postal_address)
-        <div class="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
-            <h3 class="text-lg font-semibold text-yellow-800 mb-2">
-                <i class="fas fa-envelope mr-2"></i>Postal Submission Address
-            </h3>
-            <p class="text-gray-700 whitespace-pre-line">{{ $tender->postal_address }}</p>
+        <!-- Postal Address — locked until eligibility check during application -->
+        @if($tender->tender_type == 'postal')
+        <div class="bg-amber-50 rounded-lg p-4 border border-amber-200 flex items-start gap-3">
+            <i class="fas fa-lock text-amber-500 text-xl mt-0.5 flex-shrink-0"></i>
+            <div>
+                <p class="font-semibold text-amber-800 text-sm">Postal Submission Address — Restricted</p>
+                <p class="text-xs text-amber-700 mt-1 leading-relaxed">
+                    The postal submission address and downloadable documents will be revealed only after you pass
+                    the eligibility check during the application process.
+                    @if($tender->postal_receipt_deadline)
+                        <br><span class="font-semibold mt-1 inline-block">Physical documents receipt deadline: {{ $tender->postal_receipt_deadline->format('d M Y') }}</span>
+                    @endif
+                </p>
+            </div>
         </div>
         @endif
 

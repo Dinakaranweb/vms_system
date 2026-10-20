@@ -473,6 +473,10 @@
 
     </div>
 
+    <div class="mt-6">
+        @include('partials.dashboard-widgets', ['widgetData' => $widgetData, 'hideEmptyState' => true])
+    </div>
+
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>

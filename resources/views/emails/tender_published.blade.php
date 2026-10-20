@@ -72,10 +72,12 @@
                 <span>{{ \Carbon\Carbon::parse($tender->submission_deadline)->format('d M Y') }}</span>
             </div>
 
+            @if($tender->opening_date)
             <div class="meta-row">
                 <strong>Opening Date</strong>
                 <span>{{ \Carbon\Carbon::parse($tender->opening_date)->format('d M Y') }}</span>
             </div>
+            @endif
 
             <div class="meta-row">
                 <strong>Type</strong>

@@ -3,6 +3,12 @@
 @section('title', 'Contract Details')
 @section('header', 'Contract Details')
 
+@php
+    $hasItems  = !empty($contract->order_items);
+    $orderDoc  = collect($contract->supporting_documents ?? [])->firstWhere('type', 'order_document');
+    $orderLabel = $contract->order_type === 'purchase_order' ? 'Purchase Order' : 'Work Order';
+@endphp
+
 @push('styles')
 <style>
 @media print {
@@ -213,6 +219,133 @@
             </div>
             @endif
             
+            <!-- Work Orders / Purchase Orders -->
+            @if($hasItems || $orderDoc || $contract->order_type)
+            <div class="border-t pt-4 mb-6">
+                <h4 class="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                    <i class="fas fa-file-invoice text-orange-500"></i>
+                    Work Orders / Purchase Orders
+                    @if($contract->is_partial_order)
+                        <span class="text-xs font-normal px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full">Partial Order</span>
+                    @endif
+                </h4>
+                <div class="space-y-2">
+                    @if($hasItems)
+                    <div class="flex items-center justify-between bg-orange-50 border border-orange-200 rounded-lg px-4 py-3">
+                        <div class="flex items-center gap-3">
+                            <i class="fas fa-file-pdf text-orange-500 text-lg"></i>
+                            <div>
+                                <p class="font-semibold text-gray-800 text-sm">{{ $orderLabel }} — {{ $contract->order_number ?? '—' }}</p>
+                                <p class="text-xs text-gray-500">
+                                    {{ $contract->order_date ? \Carbon\Carbon::parse($contract->order_date)->format('d M, Y') : '' }}
+                                    @if($contract->order_generated_at)
+                                        · Generated {{ $contract->order_generated_at->format('d M, Y') }}
+                                    @endif
+                                </p>
+                            </div>
+                        </div>
+                        <a href="{{ route('vendor.contracts.order-pdf', $contract->id) }}" target="_blank"
+                           class="inline-flex items-center gap-1.5 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition">
+                            <i class="fas fa-download text-xs"></i> Download PDF
+                        </a>
+                    </div>
+                    @elseif($orderDoc)
+                    <div class="flex items-center justify-between bg-orange-50 border border-orange-200 rounded-lg px-4 py-3">
+                        <div class="flex items-center gap-3">
+                            <i class="fas fa-paperclip text-orange-500 text-lg"></i>
+                            <div>
+                                <p class="font-semibold text-gray-800 text-sm">{{ $orderLabel }} — Attachment</p>
+                                <p class="text-xs text-gray-500">{{ $orderDoc['name'] ?? basename($orderDoc['path']) }}</p>
+                            </div>
+                        </div>
+                        <a href="{{ Storage::disk('public')->url($orderDoc['path']) }}" target="_blank"
+                           class="inline-flex items-center gap-1.5 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition">
+                            <i class="fas fa-download text-xs"></i> Download
+                        </a>
+                    </div>
+                    @else
+                    <div class="text-sm text-gray-400 italic px-2 py-3">
+                        <i class="fas fa-clock mr-1"></i> Work / Purchase Order not yet issued for this contract.
+                    </div>
+                    @endif
+
+                    {{-- Additional uploaded supporting docs (non-order_document type) visible to vendor --}}
+                    @php
+                        $vendorDocs = collect($contract->supporting_documents ?? [])
+                            ->filter(fn($d) => ($d['type'] ?? '') !== 'order_document')
+                            ->values();
+                    @endphp
+                    @foreach($vendorDocs as $doc)
+                    <div class="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
+                        <div class="flex items-center gap-3">
+                            <i class="fas fa-file-alt text-gray-400 text-lg"></i>
+                            <div>
+                                <p class="font-semibold text-gray-800 text-sm">{{ $doc['label'] ?? ucfirst(str_replace('_', ' ', $doc['type'] ?? 'Document')) }}</p>
+                                <p class="text-xs text-gray-500">{{ $doc['name'] ?? basename($doc['path']) }}</p>
+                            </div>
+                        </div>
+                        <a href="{{ Storage::disk('public')->url($doc['path']) }}" target="_blank"
+                           class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white text-xs font-medium rounded-lg transition">
+                            <i class="fas fa-download text-xs"></i> Download
+                        </a>
+                    </div>
+                    @endforeach
+                </div>
+            </div>
+            @endif
+
+            <!-- Related Partial Orders (sibling contracts) -->
+            @if(isset($siblingContracts) && $siblingContracts->isNotEmpty())
+            <div class="border-t pt-4 mb-6">
+                <h4 class="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                    <i class="fas fa-layer-group text-amber-500"></i>
+                    Related Orders (Partial Orders for this Tender)
+                </h4>
+                <div class="space-y-2">
+                    @foreach($siblingContracts as $sib)
+                    @php
+                        $sibHasItems = !empty($sib->order_items);
+                        $sibOrderDoc = collect($sib->supporting_documents ?? [])->firstWhere('type', 'order_document');
+                        $sibLabel    = $sib->order_type === 'purchase_order' ? 'PO' : 'WO';
+                    @endphp
+                    <div class="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+                        <div class="flex items-center gap-3">
+                            <i class="fas fa-file-contract text-amber-500"></i>
+                            <div>
+                                <p class="font-semibold text-gray-800 text-sm font-mono">{{ $sib->contract_number }}</p>
+                                <p class="text-xs text-gray-500">
+                                    {{ $sib->order_number ?? '—' }}
+                                    @if($sib->order_type) · {{ $sibLabel }} @endif
+                                    @if($sib->is_partial_order) · <span class="text-amber-600">Partial</span> @endif
+                                    @if($sib->contract_value > 0) · ₹{{ number_format($sib->contract_value, 2) }} @endif
+                                </p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            @if($sibHasItems)
+                            <a href="{{ route('vendor.contracts.order-pdf', $sib->id) }}" target="_blank"
+                               class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-medium rounded-lg transition"
+                               title="Download {{ $sibLabel }} PDF">
+                                <i class="fas fa-file-pdf text-xs"></i> PDF
+                            </a>
+                            @elseif($sibOrderDoc)
+                            <a href="{{ Storage::disk('public')->url($sibOrderDoc['path']) }}" target="_blank"
+                               class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-medium rounded-lg transition"
+                               title="Download {{ $sibLabel }} Attachment">
+                                <i class="fas fa-paperclip text-xs"></i> File
+                            </a>
+                            @endif
+                            <a href="{{ route('vendor.contracts.show', $sib->id) }}"
+                               class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition">
+                                <i class="fas fa-eye text-xs"></i> View
+                            </a>
+                        </div>
+                    </div>
+                    @endforeach
+                </div>
+            </div>
+            @endif
+
             <!-- Action Buttons -->
             <div class="mt-6 pt-4 border-t flex justify-end space-x-3">
                 @if($contract->status == 'draft' && !$contract->signed_by_vendor)

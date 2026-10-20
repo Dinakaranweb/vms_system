@@ -3,10 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\TenderApplication;
+use App\Traits\HasDashboardWidgets;
 use Illuminate\Http\Request;
 
 class CommitteeController extends Controller
 {
+    use HasDashboardWidgets;
+
     public function dashboard()
     {
         $user = auth()->user();
@@ -20,7 +23,7 @@ class CommitteeController extends Controller
 
         $pendingApplications = TenderApplication::whereIn('tender_id', $activeTenderIds)
             ->where('status', 'submitted')
-            ->with(['tender:id,title,tender_number', 'vendor:id,company_name,email'])
+            ->with(['tender:id,title,tender_number,bid_opening_at', 'vendor:id,company_name,email'])
             ->latest()
             ->take(10)
             ->get();
@@ -32,7 +35,9 @@ class CommitteeController extends Controller
             'total_applications'  => TenderApplication::whereIn('tender_id', $activeTenderIds)->count(),
         ];
 
-        return view('committee.dashboard', compact('tenders', 'pendingApplications', 'stats'));
+        $widgetData = $this->getDashboardWidgetData();
+
+        return view('committee.dashboard', compact('tenders', 'pendingApplications', 'stats', 'widgetData'));
     }
 
     public function tenders()
@@ -53,7 +58,7 @@ class CommitteeController extends Controller
             ->pluck('tenders.id');
 
         $query = TenderApplication::whereIn('tender_id', $tenderIds)
-            ->with(['tender:id,title,tender_number', 'vendor:id,company_name,email']);
+            ->with(['tender:id,title,tender_number,bid_opening_at', 'vendor:id,company_name,email']);
 
         if ($request->status) {
             $query->where('status', $request->status);

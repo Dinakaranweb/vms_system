@@ -103,10 +103,24 @@
 
     <!-- My Tenders Table -->
     <div class="bg-white rounded-xl shadow-sm overflow-hidden">
-        <div class="px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 flex justify-between items-center">
+        <div class="px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 flex justify-between items-center flex-wrap gap-3">
             <h3 class="text-lg font-semibold text-white">
                 <i class="fas fa-list mr-2"></i>My Tenders
             </h3>
+            <form method="GET" action="{{ route('tender-owner.tenders.index') }}" class="flex items-center gap-2 flex-wrap">
+                <input type="text" name="search" value="{{ request('search') }}" placeholder="Search by title or tender no…"
+                    class="bg-white/15 border border-white/30 text-white placeholder-white/70 rounded-lg px-3 py-1.5 text-sm min-w-[220px] focus:outline-none focus:bg-white/25">
+                <select name="status" class="bg-white/15 border border-white/30 text-white rounded-lg px-2 py-1.5 text-sm">
+                    <option value="" class="text-gray-900">All Status</option>
+                    <option value="draft" class="text-gray-900" @selected(request('status') === 'draft')>Draft</option>
+                    <option value="published" class="text-gray-900" @selected(request('status') === 'published')>Published</option>
+                    <option value="closed" class="text-gray-900" @selected(request('status') === 'closed')>Closed</option>
+                </select>
+                <button type="submit" class="bg-white text-blue-600 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-gray-100"><i class="fas fa-search"></i></button>
+                @if(request('search') || request('status'))
+                <a href="{{ route('tender-owner.tenders.index') }}" class="text-white/85 text-xs underline">Clear</a>
+                @endif
+            </form>
             <a href="{{ route('tender-owner.tenders.create') }}" class="bg-white text-blue-600 px-4 py-2 rounded-lg hover:bg-gray-100 transition">
                 <i class="fas fa-plus mr-2"></i>Create New Tender
             </a>

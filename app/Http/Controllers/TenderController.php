@@ -6,9 +6,13 @@ use App\Models\Tender;
 use App\Models\TenderDocument;
 use App\Models\EligibilityQuestion;
 use App\Models\Category;
+use App\Models\TenderView;
 use App\Mail\TenderPublishedMail;
 use App\Mail\TenderClosedMail;
+use App\Notifications\TenderOpeningOtpNotification;
 use App\Models\TenderApplication;
+use App\Models\TenderReviewOtp;
+use App\Models\PurchaseCommitteeMember;
 use App\Models\Vendor;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -22,36 +26,55 @@ class TenderController extends Controller
     /**
      * Display a listing of tenders.
      */
-    public function index()
+    public function index(Request $request)
 {
     $user = auth()->user();
-    
+    $search = trim((string) $request->query('search', ''));
+    $statusFilter = $request->query('status', '');
+
+    $applySearch = function ($query) use ($search, $statusFilter) {
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                $q->where('title', 'like', "%{$search}%")
+                  ->orWhere('tender_number', 'like', "%{$search}%");
+            });
+        }
+        if ($statusFilter !== '') {
+            $query->where('status', $statusFilter);
+        }
+        return $query;
+    };
+
     // Get accessible tenders based on user role
     if ($user->hasRole('super-admin') || $user->hasRole('admin')) {
-        $tenders = Tender::with(['creator', 'owner', 'categories'])->orderBy('created_at', 'desc')->paginate(10);
+        $tenders = $applySearch(Tender::with(['creator', 'owner', 'categories']))
+            ->orderBy('created_at', 'desc')
+            ->paginate(10)
+            ->withQueryString();
     }
     else if ($user->hasRole('tender-owner')) {
-        $tenders = Tender::where('owner_id', $user->id)
-            ->with(['creator', 'owner', 'categories'])
+        $tenders = $applySearch(Tender::where('owner_id', $user->id)->with(['creator', 'owner', 'categories']))
             ->orderBy('created_at', 'desc')
-            ->paginate(10);
+            ->paginate(10)
+            ->withQueryString();
     }
     else if ($user->isCommitteeMemberForAnyTender()) {
         $tenderIds = $user->committeeTenders()
             ->wherePivot('is_active', true)
             ->pluck('tender_id');
-        $tenders = Tender::whereIn('id', $tenderIds)
-            ->with(['creator', 'owner', 'categories'])
+        $tenders = $applySearch(Tender::whereIn('id', $tenderIds)->with(['creator', 'owner', 'categories']))
             ->orderBy('created_at', 'desc')
-            ->paginate(10);
+            ->paginate(10)
+            ->withQueryString();
     }
     else {
         // Regular users (vendors) see only published tenders
-        $tenders = Tender::where('status', 'published')
+        $tenders = $applySearch(Tender::where('status', 'published'))
             ->orderBy('created_at', 'desc')
-            ->paginate(10);
+            ->paginate(10)
+            ->withQueryString();
     }
-    
+
     $stats = [
         'total' => Tender::count(),
         'published' => Tender::where('status', 'published')->count(),
@@ -93,9 +116,10 @@ class TenderController extends Controller
             'description' => 'required|string',
             'eligibility_criteria' => 'nullable|string',
             'estimated_value' => 'nullable|numeric',
+            'start_date' => 'required|date',
             'submission_deadline' => 'required|date',
-            'opening_date' => 'required|date|after:submission_deadline',
-            'tender_type' => 'required|in:online,postal',
+            'opening_date' => 'nullable|date',
+            'tender_type' => 'required|in:online,postal,hybrid',
             'postal_address' => 'required_if:tender_type,postal|nullable|string',
             'documents.*' => 'nullable|file|mimes:pdf,doc,docx|max:10240',
             'questions' => 'nullable|array',
@@ -108,9 +132,9 @@ class TenderController extends Controller
                 'title' => $validated['title'],
                 'description' => $validated['description'],
                 'eligibility_criteria' => $validated['eligibility_criteria'] ?? '',
-                'estimated_value' => $validated['estimated_value'] ?? null,
                 'submission_deadline' => $validated['submission_deadline'],
-                'opening_date' => $validated['opening_date'],
+                'start_date' => $validated['start_date'],
+                'opening_date' => $validated['opening_date'] ?? null,
                 'tender_type' => $validated['tender_type'],
                 'is_private'               => $request->boolean('is_private'),
                 'postal_address'           => $validated['postal_address'] ?? null,
@@ -130,23 +154,46 @@ class TenderController extends Controller
                 'notify_specific_vendors'     => $request->filled('notify_specific_vendors')
                     ? array_values(array_filter(array_map('intval', explode(',', $request->notify_specific_vendors))))
                     : null,
+                'auto_publish'            => $request->boolean('auto_publish'),
+                'show_on_university'      => $request->boolean('auto_publish') ? $request->boolean('show_on_university') : false,
+                'university_description'  => $request->boolean('auto_publish') ? ($request->input('university_description') ?: null) : null,
             ]);
 
             // Save eligibility questions
             if ($request->has('questions') && is_array($request->questions)) {
                 foreach ($request->questions as $questionData) {
                     if (!empty($questionData['question'])) {
+                        $optionsData = null;
+                        if (!empty($questionData['options']) && is_array($questionData['options'])) {
+                            $optionsData = array_values(array_filter(
+                                array_map(function ($opt) {
+                                    $label = trim($opt['label'] ?? '');
+                                    if ($label === '') return null;
+                                    return ['label' => $label, 'eligible' => isset($opt['eligible']) && $opt['eligible'] == '1'];
+                                }, $questionData['options'])
+                            ));
+                            if (empty($optionsData)) $optionsData = null;
+                        }
+                        $conditionData = null;
+                        if (!empty($questionData['eligibility_condition']['operator'])) {
+                            $conditionData = [
+                                'operator' => $questionData['eligibility_condition']['operator'],
+                                'value'    => $questionData['eligibility_condition']['value'] ?? null,
+                                'value2'   => $questionData['eligibility_condition']['value2'] ?? null,
+                            ];
+                        }
                         EligibilityQuestion::create([
-                            'tender_id' => $tender->id,
-                            'question' => $questionData['question'],
-                            'description' => $questionData['description'] ?? null,
-                            'field_type' => $questionData['field_type'] ?? 'text',
-                            'options' => isset($questionData['options']) && !empty($questionData['options']) ? array_map('trim', explode(',', $questionData['options'])) : null,
-                            'eligible_options' => isset($questionData['eligible_options']) && !empty($questionData['eligible_options']) ? array_map('trim', explode(',', $questionData['eligible_options'])) : null,
-                            'is_required' => isset($questionData['is_required']) && $questionData['is_required'] == '1',
+                            'tender_id'              => $tender->id,
+                            'question'               => $questionData['question'],
+                            'description'            => $questionData['description'] ?? null,
+                            'field_type'             => $questionData['field_type'] ?? 'text',
+                            'options'                => $optionsData,
+                            'eligible_options'       => null,
+                            'eligibility_condition'  => $conditionData,
+                            'is_required'            => isset($questionData['is_required']) && $questionData['is_required'] == '1',
                             'determines_eligibility' => isset($questionData['determines_eligibility']) && $questionData['determines_eligibility'] == '1',
-                            'max_size' => $questionData['max_size'] ?? 5120,
-                            'order' => $tender->eligibilityQuestions()->count() + 1,
+                            'max_size'               => $questionData['max_size'] ?? 5120,
+                            'order'                  => $tender->eligibilityQuestions()->count() + 1,
                         ]);
                     }
                 }
@@ -215,11 +262,14 @@ class TenderController extends Controller
         'awarded_applications' => $tender->applications()->where('status', 'awarded')->count(),
     ];
     
-    if (request()->ajax()) {
+    // The "Quick View" modal on the tenders list page fetches this same URL and injects
+    // the raw fragment into a modal div — direct navigation should get the full page
+    // with the dashboard layout instead (see admin/tenders/index.blade.php's fetch call).
+    if (request()->header('X-Requested-With') === 'XMLHttpRequest') {
         return view('admin.tenders.show', compact('tender', 'stats'));
     }
-    
-    return view('admin.tenders.show', compact('tender', 'stats'));
+
+    return view('admin.tenders.show-full', compact('tender', 'stats'));
 }
 
     /**
@@ -246,16 +296,28 @@ class TenderController extends Controller
             'eligibility_criteria' => 'nullable|string',
             'estimated_value'      => 'nullable|numeric|min:0',
             'emda_amount'          => 'nullable|numeric|min:0',
+            'start_date'           => 'required|date',
             'submission_deadline'  => 'required|date',
-            'opening_date'         => 'required|date',
-            'tender_type'          => 'required|in:online,postal',
+            'opening_date'         => 'nullable|date',
+            'tender_type'          => 'required|in:online,postal,hybrid',
             'postal_address'       => 'required_if:tender_type,postal|nullable|string',
         ]);
 
         DB::beginTransaction();
 
         try {
+            $autoPublishData = [];
+            if ($tender->isDraft()) {
+                $autoPublishData['auto_publish'] = $request->boolean('auto_publish');
+                if ($request->boolean('auto_publish')) {
+                    $autoPublishData['show_on_university'] = $request->boolean('show_on_university');
+                    $autoPublishData['university_description'] = $request->input('university_description') ?: null;
+                }
+            }
+
             $tender->update(array_merge($validated, [
+                'start_date'                  => $request->filled('start_date') ? $request->start_date : null,
+                'opening_date'                => $request->filled('opening_date') ? $request->opening_date : null,
                 'eligibility_criteria'        => $validated['eligibility_criteria'] ?? '',
                 'is_private'                  => $request->boolean('is_private'),
                 'postal_receipt_deadline'     => $request->filled('postal_receipt_deadline') ? $request->postal_receipt_deadline : null,
@@ -268,7 +330,7 @@ class TenderController extends Controller
                 'email_notifications_enabled' => $request->boolean('email_notifications_enabled'),
                 'emda_amount'                 => $request->boolean('require_emd') && $request->filled('emda_amount') ? $request->emda_amount : null,
                 'estimated_value'             => $request->boolean('require_estimated_value') && $request->filled('estimated_value') ? $request->estimated_value : null,
-            ]));
+            ] + $autoPublishData));
 
             // Handle new document uploads
             if ($request->hasFile('new_documents')) {
@@ -292,25 +354,44 @@ class TenderController extends Controller
             }
             
             // Handle new eligibility questions
-           // Handle new eligibility questions
-if ($request->has('new_questions')) {
-    foreach ($request->new_questions as $questionData) {
-        if (!empty($questionData['question'])) {
-            EligibilityQuestion::create([
-                'tender_id' => $tender->id,
-                'question' => $questionData['question'],
-                'description' => $questionData['description'] ?? null,
-                'field_type' => $questionData['field_type'] ?? 'text',
-                'options' => isset($questionData['options']) && !empty($questionData['options']) ? array_map('trim', explode(',', $questionData['options'])) : null,
-                'eligible_options' => isset($questionData['eligible_options']) && !empty($questionData['eligible_options']) ? array_map('trim', explode(',', $questionData['eligible_options'])) : null,
-                'is_required' => isset($questionData['is_required']) && $questionData['is_required'] == '1',
-                'determines_eligibility' => isset($questionData['determines_eligibility']) && $questionData['determines_eligibility'] == '1',
-                'max_size' => $questionData['max_size'] ?? 5120,
-                'order' => $tender->eligibilityQuestions()->count() + 1,
-            ]);
-        }
-    }
-}
+            if ($request->has('new_questions')) {
+                foreach ($request->new_questions as $questionData) {
+                    if (!empty($questionData['question'])) {
+                        $optionsData = null;
+                        if (!empty($questionData['options']) && is_array($questionData['options'])) {
+                            $optionsData = array_values(array_filter(
+                                array_map(function ($opt) {
+                                    $label = trim($opt['label'] ?? '');
+                                    if ($label === '') return null;
+                                    return ['label' => $label, 'eligible' => isset($opt['eligible']) && $opt['eligible'] == '1'];
+                                }, $questionData['options'])
+                            ));
+                            if (empty($optionsData)) $optionsData = null;
+                        }
+                        $conditionData = null;
+                        if (!empty($questionData['eligibility_condition']['operator'])) {
+                            $conditionData = [
+                                'operator' => $questionData['eligibility_condition']['operator'],
+                                'value'    => $questionData['eligibility_condition']['value'] ?? null,
+                                'value2'   => $questionData['eligibility_condition']['value2'] ?? null,
+                            ];
+                        }
+                        EligibilityQuestion::create([
+                            'tender_id'              => $tender->id,
+                            'question'               => $questionData['question'],
+                            'description'            => $questionData['description'] ?? null,
+                            'field_type'             => $questionData['field_type'] ?? 'text',
+                            'options'                => $optionsData,
+                            'eligible_options'       => null,
+                            'eligibility_condition'  => $conditionData,
+                            'is_required'            => isset($questionData['is_required']) && $questionData['is_required'] == '1',
+                            'determines_eligibility' => isset($questionData['determines_eligibility']) && $questionData['determines_eligibility'] == '1',
+                            'max_size'               => $questionData['max_size'] ?? 5120,
+                            'order'                  => $tender->eligibilityQuestions()->count() + 1,
+                        ]);
+                    }
+                }
+            }
 
             // Handle removed eligibility questions
             if ($request->has('eligibility_questions_removed')) {
@@ -439,6 +520,52 @@ if ($request->has('new_questions')) {
     }
 
     /**
+     * Tender view analytics for admin / super-admin.
+     */
+    public function analytics($id)
+    {
+        $tender = Tender::findOrFail($id);
+        $rp     = auth()->user()->hasRole('super-admin') ? 'super-admin' : 'admin';
+
+        $views = TenderView::where('tender_id', $id)
+            ->with('user')
+            ->orderBy('viewed_at', 'desc')
+            ->paginate(50);
+
+        $stats = [
+            'total_hits'   => TenderView::where('tender_id', $id)->count(),
+            'unique_ips'   => TenderView::where('tender_id', $id)->distinct('ip_address')->count('ip_address'),
+            'logged_users' => TenderView::where('tender_id', $id)->whereNotNull('user_id')->distinct('user_id')->count('user_id'),
+            'today'        => TenderView::where('tender_id', $id)->whereDate('viewed_at', today())->count(),
+        ];
+
+        // Build a 30-day daily view series (fill missing days with 0)
+        $rawDaily = TenderView::where('tender_id', $id)
+            ->where('viewed_at', '>=', now()->subDays(29)->startOfDay())
+            ->selectRaw('DATE(viewed_at) as date, COUNT(*) as count')
+            ->groupBy('date')
+            ->orderBy('date')
+            ->get()
+            ->keyBy('date');
+
+        $days = collect();
+        for ($i = 29; $i >= 0; $i--) {
+            $date   = now()->subDays($i)->format('Y-m-d');
+            $days[] = ['date' => $date, 'count' => $rawDaily->get($date)?->count ?? 0];
+        }
+
+        // Top IPs (by hit count)
+        $topIps = TenderView::where('tender_id', $id)
+            ->selectRaw('ip_address, COUNT(*) as hits')
+            ->groupBy('ip_address')
+            ->orderByDesc('hits')
+            ->limit(10)
+            ->get();
+
+        return view('admin.tenders.analytics', compact('tender', 'views', 'stats', 'days', 'topIps', 'rp'));
+    }
+
+    /**
      * Close tender.
      */
     public function close(Request $request, $id)
@@ -475,7 +602,102 @@ if ($request->has('new_questions')) {
             ], 500);
         }
     }
-    
+
+    /**
+     * Initiate opening a closed tender — a decision the Purchase Officer, Tender Owner, or a
+     * Purchase Committee member makes on their own schedule, never automatically, and never
+     * before the tender has actually closed.
+     *
+     * This does not open the tender. It issues one one-time code per active Purchase Committee
+     * member, delivered to that member's own login (notification bell) and inbox, and then
+     * hands the initiating officer the opening screen where all of those codes get keyed in
+     * together. Each member reads their code out to the officer in person; the tender opens —
+     * and the documents reach the committee's logins — only once every code has been entered.
+     * See TenderReviewController::openingOtpPanel() and verifyOpeningOtps().
+     *
+     * Idempotent: clicking it again while codes are outstanding re-issues fresh codes to
+     * everyone not yet verified, acting as a "resend to all" action. Members whose code the
+     * officer has already entered stay verified and are not disturbed.
+     */
+    public function openBidding($id)
+    {
+        $tender = Tender::findOrFail($id);
+        $user = auth()->user();
+
+        $isAuthorized = $user->hasRole('super-admin')
+            || $user->hasRole('admin')
+            || $user->hasRole('purchase-committee')
+            || ($user->hasRole('tender-owner') && $tender->owner_id === $user->id);
+
+        if (!$isAuthorized) {
+            return response()->json(['success' => false, 'message' => 'You are not authorized to open bids for this tender.'], 403);
+        }
+
+        if (!$tender->canBeOpened()) {
+            $reason = $tender->isBidOpen() ? 'Bids for this tender have already been opened.' : 'This tender must be closed before bids can be opened.';
+            return response()->json(['success' => false, 'message' => $reason], 400);
+        }
+
+        $members = PurchaseCommitteeMember::active()->ordered()->get();
+        if ($members->isEmpty()) {
+            return response()->json(['success' => false, 'message' => 'No active Purchase Committee members are configured. Add at least one before a tender can be opened.'], 400);
+        }
+
+        $issued = 0;
+
+        DB::transaction(function () use ($tender, $user, $members, &$issued) {
+            $tender->update(['bid_opened_by' => $user->id]);
+
+            foreach ($members as $member) {
+                $reviewOtp = TenderReviewOtp::firstOrCreate(
+                    ['tender_id' => $tender->id, 'committee_member_id' => $member->user_id]
+                );
+
+                // Leave members the officer has already keyed in alone — re-issuing would throw
+                // away a code that was already read out and accepted.
+                if ($reviewOtp->isVerified()) {
+                    continue;
+                }
+
+                $this->issueOpeningOtp($reviewOtp, $user->name);
+                $issued++;
+            }
+        });
+
+        return response()->json([
+            'success'  => true,
+            'redirect' => route('purchase-committee.review.opening-codes', $tender->id),
+            'message'  => $issued . ' of ' . $members->count() . ' Purchase Committee member(s) have been sent an opening code in their login. Collect each code from them in person and enter them together on the opening screen.',
+        ]);
+    }
+
+    /**
+     * Generates a member's code and pushes it to that member's own notifications (and inbox).
+     * The code is deliberately never surfaced to the officer here — the officer only learns it
+     * when the member reads it out to them.
+     */
+    private function issueOpeningOtp(TenderReviewOtp $reviewOtp, ?string $officerName = null): void
+    {
+        $code = (string) random_int(100000, 999999);
+        $expiresAt = now()->addMinutes(30);
+
+        $reviewOtp->update([
+            'otp_code'         => $code,
+            'otp_expires_at'   => $expiresAt,
+            'otp_sent_at'      => now(),
+            'otp_verified_at'  => null,
+            'otp_collected_by' => null,
+        ]);
+
+        try {
+            $reviewOtp->committeeMember->notify(
+                new TenderOpeningOtpNotification($reviewOtp->tender, $code, $expiresAt, $officerName)
+            );
+        } catch (\Exception $e) {
+            \Log::error('TenderOpeningOtpNotification failed for user ' . $reviewOtp->committee_member_id . ': ' . $e->getMessage());
+        }
+    }
+
     /**
      * Duplicate tender.
      */
@@ -584,6 +806,101 @@ if ($request->has('new_questions')) {
     }
 
     /**
+     * Show the dedicated "Define Eligibility Criteria" screen for a tender.
+     */
+    public function eligibilityQuestions($id)
+    {
+        $tender = Tender::with('eligibilityQuestions')->findOrFail($id);
+
+        $existingQuestionsForJs = $tender->eligibilityQuestions->map(function ($q) {
+            return [
+                'question'               => $q->question,
+                'description'            => $q->description,
+                'field_type'             => $q->field_type,
+                'options'                => $q->options,
+                'eligibility_condition'  => $q->eligibility_condition,
+                'is_required'            => (bool) $q->is_required,
+                'determines_eligibility' => (bool) $q->determines_eligibility,
+                'max_size'               => $q->max_size,
+            ];
+        })->values();
+
+        return view('admin.tenders.eligibility', compact('tender', 'existingQuestionsForJs'));
+    }
+
+    /**
+     * Save the full set of eligibility questions from the dedicated screen.
+     * Full replace: this page represents "the" eligibility criteria for the tender,
+     * so existing questions are cleared and re-created from the submitted set.
+     */
+    public function storeEligibilityQuestions(Request $request, $id)
+    {
+        $tender = Tender::findOrFail($id);
+
+        $request->validate([
+            'questions'             => 'nullable|array',
+            'questions.*.question'  => 'required_with:questions|string',
+        ]);
+
+        DB::beginTransaction();
+        try {
+            $tender->eligibilityQuestions()->delete();
+
+            if ($request->has('questions') && is_array($request->questions)) {
+                foreach ($request->questions as $questionData) {
+                    if (empty($questionData['question'])) {
+                        continue;
+                    }
+
+                    $optionsData = null;
+                    if (!empty($questionData['options']) && is_array($questionData['options'])) {
+                        $optionsData = array_values(array_filter(
+                            array_map(function ($opt) {
+                                $label = trim($opt['label'] ?? '');
+                                if ($label === '') return null;
+                                return ['label' => $label, 'eligible' => isset($opt['eligible']) && $opt['eligible'] == '1'];
+                            }, $questionData['options'])
+                        ));
+                        if (empty($optionsData)) $optionsData = null;
+                    }
+
+                    $conditionData = null;
+                    if (!empty($questionData['eligibility_condition']['operator'])) {
+                        $conditionData = [
+                            'operator' => $questionData['eligibility_condition']['operator'],
+                            'value'    => $questionData['eligibility_condition']['value'] ?? null,
+                            'value2'   => $questionData['eligibility_condition']['value2'] ?? null,
+                        ];
+                    }
+
+                    EligibilityQuestion::create([
+                        'tender_id'              => $tender->id,
+                        'question'               => $questionData['question'],
+                        'description'            => $questionData['description'] ?? null,
+                        'field_type'             => $questionData['field_type'] ?? 'text',
+                        'options'                => $optionsData,
+                        'eligible_options'       => null,
+                        'eligibility_condition'  => $conditionData,
+                        'is_required'            => isset($questionData['is_required']) && $questionData['is_required'] == '1',
+                        'determines_eligibility' => isset($questionData['determines_eligibility']) && $questionData['determines_eligibility'] == '1',
+                        'max_size'               => $questionData['max_size'] ?? 5120,
+                        'order'                  => $tender->eligibilityQuestions()->count() + 1,
+                    ]);
+                }
+            }
+
+            DB::commit();
+
+            $rp = auth()->user()->hasRole('super-admin') ? 'super-admin' : 'admin';
+            return redirect()->route($rp . '.tenders.show', $tender->id)
+                ->with('success', 'Eligibility questions updated successfully!');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->withInput()->withErrors(['general' => 'Failed to save eligibility questions: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
      * Get eligibility question for editing.
      */
     public function getEligibilityQuestion($id)
@@ -606,19 +923,42 @@ if ($request->has('new_questions')) {
      * Update eligibility question.
      */
     public function updateEligibilityQuestion(Request $request, $id)
-{
-    try {
-        $question = EligibilityQuestion::findOrFail($id);
-        $question->update([
-            'question' => $request->question,
-            'description' => $request->description,
-            'field_type' => $request->field_type,
-            'is_required' => $request->is_required,
-            'determines_eligibility' => $request->determines_eligibility,
-            'options' => $request->options ? array_map('trim', explode(',', $request->options)) : null,
-            'eligible_options' => $request->eligible_options ? array_map('trim', explode(',', $request->eligible_options)) : null,
-            'max_size' => $request->max_size,
-        ]);
+    {
+        try {
+            $question = EligibilityQuestion::findOrFail($id);
+
+            $optionsData = null;
+            if ($request->options && is_array($request->options)) {
+                $optionsData = array_values(array_filter(
+                    array_map(function ($opt) {
+                        $label = trim($opt['label'] ?? (is_string($opt) ? $opt : ''));
+                        if ($label === '') return null;
+                        return ['label' => $label, 'eligible' => isset($opt['eligible']) && $opt['eligible']];
+                    }, $request->options)
+                ));
+                if (empty($optionsData)) $optionsData = null;
+            }
+
+            $conditionData = null;
+            if ($request->eligibility_condition && !empty($request->eligibility_condition['operator'])) {
+                $conditionData = [
+                    'operator' => $request->eligibility_condition['operator'],
+                    'value'    => $request->eligibility_condition['value'] ?? null,
+                    'value2'   => $request->eligibility_condition['value2'] ?? null,
+                ];
+            }
+
+            $question->update([
+                'question'               => $request->question,
+                'description'            => $request->description,
+                'field_type'             => $request->field_type,
+                'is_required'            => $request->is_required,
+                'determines_eligibility' => $request->determines_eligibility,
+                'options'                => $optionsData,
+                'eligible_options'       => null,
+                'eligibility_condition'  => $conditionData,
+                'max_size'               => $request->max_size,
+            ]);
         
         return response()->json([
             'success' => true,
@@ -660,18 +1000,40 @@ if ($request->has('new_questions')) {
     {
         try {
             $tender = Tender::findOrFail($id);
-            
+
+            $optionsData = null;
+            if ($request->options && is_array($request->options)) {
+                $optionsData = array_values(array_filter(
+                    array_map(function ($opt) {
+                        $label = trim($opt['label'] ?? (is_string($opt) ? $opt : ''));
+                        if ($label === '') return null;
+                        return ['label' => $label, 'eligible' => isset($opt['eligible']) && $opt['eligible']];
+                    }, $request->options)
+                ));
+                if (empty($optionsData)) $optionsData = null;
+            }
+
+            $conditionData = null;
+            if ($request->eligibility_condition && !empty($request->eligibility_condition['operator'])) {
+                $conditionData = [
+                    'operator' => $request->eligibility_condition['operator'],
+                    'value'    => $request->eligibility_condition['value'] ?? null,
+                    'value2'   => $request->eligibility_condition['value2'] ?? null,
+                ];
+            }
+
             $question = EligibilityQuestion::create([
-                'tender_id' => $tender->id,
-                'question' => $request->question,
-                'description' => $request->description,
-                'field_type' => $request->field_type,
-                'is_required' => $request->is_required,
+                'tender_id'              => $tender->id,
+                'question'               => $request->question,
+                'description'            => $request->description,
+                'field_type'             => $request->field_type,
+                'is_required'            => $request->is_required,
                 'determines_eligibility' => $request->determines_eligibility ?? false,
-                'options' => $request->options ? array_map('trim', explode(',', $request->options)) : null,
-                'eligible_options' => $request->eligible_options ? array_map('trim', explode(',', $request->eligible_options)) : null,
-                'max_size' => $request->max_size,
-                'order' => $tender->eligibilityQuestions()->count() + 1,
+                'options'                => $optionsData,
+                'eligible_options'       => null,
+                'eligibility_condition'  => $conditionData,
+                'max_size'               => $request->max_size,
+                'order'                  => $tender->eligibilityQuestions()->count() + 1,
             ]);
             
             return response()->json([
@@ -707,14 +1069,25 @@ if ($request->has('new_questions')) {
     /**
  * Display list of owner's tenders.
  */
-public function ownerIndex()
+public function ownerIndex(Request $request)
 {
+    $search = trim((string) $request->query('search', ''));
+    $statusFilter = $request->query('status', '');
+
     $tenders = auth()->user()->ownedTenders()
         ->with(['categories', 'committeeMembers'])
         ->withCount('applications')
+        ->when($search !== '', function ($q) use ($search) {
+            $q->where(function ($q2) use ($search) {
+                $q2->where('title', 'like', "%{$search}%")
+                   ->orWhere('tender_number', 'like', "%{$search}%");
+            });
+        })
+        ->when($statusFilter !== '', fn($q) => $q->where('status', $statusFilter))
         ->latest()
-        ->paginate(10);
-    
+        ->paginate(10)
+        ->withQueryString();
+
     $stats = [
         'total' => $tenders->total(),
         'published' => auth()->user()->ownedTenders()->where('status', 'published')->count(),
@@ -740,9 +1113,10 @@ public function ownerIndex()
         'description' => 'required|string',
         'eligibility_criteria' => 'nullable|string',
         'estimated_value' => 'nullable|numeric',
+        'start_date' => 'required|date',
         'submission_deadline' => 'required|date',
-        'opening_date' => 'required|date',
-        'tender_type' => 'required|in:online,postal',
+        'opening_date' => 'nullable|date',
+        'tender_type' => 'required|in:online,postal,hybrid',
         'postal_address' => 'required_if:tender_type,postal|nullable|string',
         'documents.*' => 'nullable|file|mimes:pdf,doc,docx|max:10240',
         'questions' => 'nullable|array',
@@ -761,10 +1135,9 @@ public function ownerIndex()
             'title' => $validated['title'],
             'description' => $validated['description'],
             'eligibility_criteria' => $validated['eligibility_criteria'] ?? '',
-            'estimated_value' => $validated['estimated_value'] ?? null,
-            'emda_amount'     => $request->filled('emda_amount') ? $request->emda_amount : null,
             'submission_deadline' => $validated['submission_deadline'],
-            'opening_date' => $validated['opening_date'],
+            'start_date' => $validated['start_date'],
+            'opening_date' => $validated['opening_date'] ?? null,
             'opening_time'  => $request->filled('opening_time') ? $request->opening_time : null,
             'opening_venue' => $request->filled('opening_venue') ? $request->opening_venue : null,
             'tender_type' => $validated['tender_type'],
@@ -785,29 +1158,51 @@ public function ownerIndex()
             'email_notifications_enabled' => $request->boolean('email_notifications_enabled', true),
             'emda_amount'                 => $request->boolean('require_emd') && $request->filled('emda_amount') ? $request->emda_amount : null,
             'estimated_value'             => $request->boolean('require_estimated_value') && $request->filled('estimated_value') ? $request->estimated_value : null,
+            'auto_publish'            => $request->boolean('auto_publish'),
+            'show_on_university'      => $request->boolean('auto_publish') ? $request->boolean('show_on_university') : false,
+            'university_description'  => $request->boolean('auto_publish') ? ($request->input('university_description') ?: null) : null,
         ]);
 
         \Log::info('Tender Created - ID: ' . $tender->id . ', Owner ID: ' . $tender->owner_id);
 
         // Save eligibility questions
-        // Save eligibility questions
-if ($request->has('questions') && is_array($request->questions)) {
-    foreach ($request->questions as $questionData) {
-        if (!empty($questionData['question'])) {
-            EligibilityQuestion::create([
-                'tender_id' => $tender->id,
-                'question' => $questionData['question'],
-                'description' => $questionData['description'] ?? null,
-                'field_type' => $questionData['field_type'] ?? 'text',
-                'options' => isset($questionData['options']) && !empty($questionData['options']) ? array_map('trim', explode(',', $questionData['options'])) : null,
-                'eligible_options' => isset($questionData['eligible_options']) && !empty($questionData['eligible_options']) ? array_map('trim', explode(',', $questionData['eligible_options'])) : null,
-                'is_required' => isset($questionData['is_required']) && $questionData['is_required'] == '1',
-                'determines_eligibility' => isset($questionData['determines_eligibility']) && $questionData['determines_eligibility'] == '1',
-                'max_size' => $questionData['max_size'] ?? 5120,
-            ]);
+        if ($request->has('questions') && is_array($request->questions)) {
+            foreach ($request->questions as $questionData) {
+                if (!empty($questionData['question'])) {
+                    $optionsData = null;
+                    if (!empty($questionData['options']) && is_array($questionData['options'])) {
+                        $optionsData = array_values(array_filter(
+                            array_map(function ($opt) {
+                                $label = trim($opt['label'] ?? '');
+                                if ($label === '') return null;
+                                return ['label' => $label, 'eligible' => isset($opt['eligible']) && $opt['eligible'] == '1'];
+                            }, $questionData['options'])
+                        ));
+                        if (empty($optionsData)) $optionsData = null;
+                    }
+                    $conditionData = null;
+                    if (!empty($questionData['eligibility_condition']['operator'])) {
+                        $conditionData = [
+                            'operator' => $questionData['eligibility_condition']['operator'],
+                            'value'    => $questionData['eligibility_condition']['value'] ?? null,
+                            'value2'   => $questionData['eligibility_condition']['value2'] ?? null,
+                        ];
+                    }
+                    EligibilityQuestion::create([
+                        'tender_id'              => $tender->id,
+                        'question'               => $questionData['question'],
+                        'description'            => $questionData['description'] ?? null,
+                        'field_type'             => $questionData['field_type'] ?? 'text',
+                        'options'                => $optionsData,
+                        'eligible_options'       => null,
+                        'eligibility_condition'  => $conditionData,
+                        'is_required'            => isset($questionData['is_required']) && $questionData['is_required'] == '1',
+                        'determines_eligibility' => isset($questionData['determines_eligibility']) && $questionData['determines_eligibility'] == '1',
+                        'max_size'               => $questionData['max_size'] ?? 5120,
+                    ]);
+                }
+            }
         }
-    }
-}
 
         // Handle documents
         if ($request->hasFile('documents')) {
@@ -927,9 +1322,10 @@ public function ownerUpdate(Request $request, $id)
         'eligibility_criteria' => 'nullable|string',
         'estimated_value'      => 'nullable|numeric|min:0',
         'emda_amount'          => 'nullable|numeric|min:0',
+        'start_date'           => 'required|date',
         'submission_deadline'  => 'required|date',
-        'opening_date'         => 'required|date',
-        'tender_type'          => 'required|in:online,postal',
+        'opening_date'         => 'nullable|date',
+        'tender_type'          => 'required|in:online,postal,hybrid',
         'postal_address'       => 'required_if:tender_type,postal|nullable|string',
     ]);
 
@@ -943,7 +1339,18 @@ public function ownerUpdate(Request $request, $id)
 
         $validated['eligibility_criteria'] = $validated['eligibility_criteria'] ?? '';
 
+        $ownerAutoPublishData = [];
+        if ($tender->isDraft()) {
+            $ownerAutoPublishData['auto_publish'] = $request->boolean('auto_publish');
+            if ($request->boolean('auto_publish')) {
+                $ownerAutoPublishData['show_on_university'] = $request->boolean('show_on_university');
+                $ownerAutoPublishData['university_description'] = $request->input('university_description') ?: null;
+            }
+        }
+
         $tender->update(array_merge($validated, [
+            'start_date'                  => $request->filled('start_date') ? $request->start_date : null,
+            'opening_date'                => $request->filled('opening_date') ? $request->opening_date : null,
             'is_private'                  => $request->boolean('is_private'),
             'notify_specific_vendors'     => $privateVendors,
             'notify_vendors_on_create'    => $request->boolean('notify_vendors_on_create'),
@@ -959,7 +1366,7 @@ public function ownerUpdate(Request $request, $id)
             'email_notifications_enabled' => $request->boolean('email_notifications_enabled'),
             'emda_amount'                 => $request->boolean('require_emd') && $request->filled('emda_amount') ? $request->emda_amount : null,
             'estimated_value'             => $request->boolean('require_estimated_value') && $request->filled('estimated_value') ? $request->estimated_value : null,
-        ]));
+        ] + $ownerAutoPublishData));
 
         // Handle new document uploads
         if ($request->hasFile('new_documents')) {
@@ -990,17 +1397,37 @@ public function ownerUpdate(Request $request, $id)
         if ($request->has('new_questions')) {
             foreach ($request->new_questions as $questionData) {
                 if (!empty($questionData['question'])) {
+                    $optionsData = null;
+                    if (!empty($questionData['options']) && is_array($questionData['options'])) {
+                        $optionsData = array_values(array_filter(
+                            array_map(function ($opt) {
+                                $label = trim($opt['label'] ?? '');
+                                if ($label === '') return null;
+                                return ['label' => $label, 'eligible' => isset($opt['eligible']) && $opt['eligible'] == '1'];
+                            }, $questionData['options'])
+                        ));
+                        if (empty($optionsData)) $optionsData = null;
+                    }
+                    $conditionData = null;
+                    if (!empty($questionData['eligibility_condition']['operator'])) {
+                        $conditionData = [
+                            'operator' => $questionData['eligibility_condition']['operator'],
+                            'value'    => $questionData['eligibility_condition']['value'] ?? null,
+                            'value2'   => $questionData['eligibility_condition']['value2'] ?? null,
+                        ];
+                    }
                     EligibilityQuestion::create([
-                        'tender_id' => $tender->id,
-                        'question' => $questionData['question'],
-                        'description' => $questionData['description'] ?? null,
-                        'field_type' => $questionData['field_type'] ?? 'text',
-                        'options' => isset($questionData['options']) && !empty($questionData['options']) ? array_map('trim', explode(',', $questionData['options'])) : null,
-                        'eligible_options' => isset($questionData['eligible_options']) && !empty($questionData['eligible_options']) ? array_map('trim', explode(',', $questionData['eligible_options'])) : null,
-                        'is_required' => isset($questionData['is_required']) && $questionData['is_required'] == '1',
+                        'tender_id'              => $tender->id,
+                        'question'               => $questionData['question'],
+                        'description'            => $questionData['description'] ?? null,
+                        'field_type'             => $questionData['field_type'] ?? 'text',
+                        'options'                => $optionsData,
+                        'eligible_options'       => null,
+                        'eligibility_condition'  => $conditionData,
+                        'is_required'            => isset($questionData['is_required']) && $questionData['is_required'] == '1',
                         'determines_eligibility' => isset($questionData['determines_eligibility']) && $questionData['determines_eligibility'] == '1',
-                        'max_size' => $questionData['max_size'] ?? 5120,
-                        'order' => $tender->eligibilityQuestions()->count() + 1,
+                        'max_size'               => $questionData['max_size'] ?? 5120,
+                        'order'                  => $tender->eligibilityQuestions()->count() + 1,
                     ]);
                 }
             }

@@ -83,10 +83,27 @@
                             @endif
                         </td>
                         <td class="px-6 py-4">
-                            <div class="flex space-x-2">
+                            <div class="flex space-x-2 items-center">
                                 <a href="{{ route('vendor.contracts.show', $contract->id) }}" class="text-blue-600 hover:text-blue-800" title="View Details">
                                     <i class="fas fa-eye"></i>
                                 </a>
+                                @php
+                                    $hasOrderItems = !empty($contract->order_items);
+                                    $orderAttach   = collect($contract->supporting_documents ?? [])->firstWhere('type', 'order_document');
+                                @endphp
+                                @if($hasOrderItems)
+                                <a href="{{ route('vendor.contracts.order-pdf', $contract->id) }}" target="_blank"
+                                   class="text-orange-500 hover:text-orange-700"
+                                   title="Download {{ $contract->order_type === 'purchase_order' ? 'Purchase Order' : 'Work Order' }} PDF">
+                                    <i class="fas fa-file-pdf"></i>
+                                </a>
+                                @elseif($orderAttach)
+                                <a href="{{ Storage::disk('public')->url($orderAttach['path']) }}" target="_blank"
+                                   class="text-orange-500 hover:text-orange-700"
+                                   title="Download Order Attachment">
+                                    <i class="fas fa-paperclip"></i>
+                                </a>
+                                @endif
                                 @if($contract->status == 'draft' && !$contract->signed_by_vendor)
                                 <button onclick="signContract({{ $contract->id }})" class="text-green-600 hover:text-green-800" title="Sign Contract">
                                     <i class="fas fa-signature"></i>

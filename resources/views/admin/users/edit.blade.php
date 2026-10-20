@@ -22,7 +22,8 @@
         </div>
         @endif
         
-        <form action="{{ route('admin.users.update', $user->id) }}" method="POST" class="p-6">
+        @php $rp = auth()->user()->hasRole('super-admin') ? 'super-admin' : 'admin'; @endphp
+        <form action="{{ route($rp . '.users.update', $user->id) }}" method="POST" class="p-6">
             @csrf
             @method('PUT')
             
@@ -103,7 +104,7 @@
             </div>
             
             <div class="flex justify-end space-x-3 mt-6 pt-4 border-t">
-                <a href="{{ route('admin.users') }}" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition">Cancel</a>
+                <a href="{{ route($rp . '.users') }}" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition">Cancel</a>
                 <button type="submit" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
                     <i class="fas fa-save mr-2"></i>Update User
                 </button>

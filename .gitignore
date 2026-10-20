@@ -22,3 +22,11 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Local env backups — these carry APP_KEY, DB and mail credentials
+.env.backup-*
+.env.*.backup
+
+# Database dumps taken before destructive operations
+/storage/backups/
+*.sql

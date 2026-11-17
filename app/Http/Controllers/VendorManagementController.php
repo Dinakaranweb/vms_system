@@ -7,11 +7,59 @@ use App\Models\Category;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use App\Mail\VendorApprovedMail;
 use App\Mail\VendorRejectedMail;
 
 class VendorManagementController extends Controller
 {
+    /**
+     * Flat map of stored document path => resolved public URL.
+     *
+     * The admin vendor panel is rendered client-side from this JSON, so the browser
+     * cannot call Storage::url() itself. Without this map the JS falls back to
+     * concatenating "/storage/" + path, which is wrong the moment the public disk is
+     * S3: the file is in the bucket, not under the app's document root. Worse, that
+     * guessed URL is caught by the framework's storage.local serve route, which has
+     * no signature and a private default visibility, so the miss surfaces as a 403
+     * rather than an honest 404.
+     *
+     * Shapes stored by the registration form (see AuthController::register):
+     *   pan_document  => "path/to/file.pdf"
+     *   gst_document  => ['path' => ..., 'name' => ...]
+     *   certificates  => [key => ['path' => ..., 'name' => ..., 'label' => ...], ...]
+     */
+    private static function documentUrlMap(array $documents): array
+    {
+        $paths = [];
+
+        foreach ($documents as $value) {
+            if (is_string($value)) {
+                $paths[] = $value;
+            } elseif (is_array($value)) {
+                if (isset($value['path']) && is_string($value['path'])) {
+                    $paths[] = $value['path'];
+                } else {
+                    foreach ($value as $entry) {
+                        if (is_array($entry) && isset($entry['path']) && is_string($entry['path'])) {
+                            $paths[] = $entry['path'];
+                        }
+                    }
+                }
+            }
+        }
+
+        $map = [];
+
+        foreach (array_unique($paths) as $path) {
+            if ($path !== '') {
+                $map[$path] = Storage::url($path);
+            }
+        }
+
+        return $map;
+    }
+
     /**
      * Display a listing of vendors.
      */
@@ -78,6 +126,9 @@ class VendorManagementController extends Controller
             $vendor = Vendor::with(['user', 'categories:id'])->findOrFail($id);
             $vendorData = $vendor->toArray();
             $vendorData['category_ids'] = $vendor->categories->pluck('id')->toArray();
+            $vendorData['document_urls'] = self::documentUrlMap(is_array($vendorData['registration_documents'] ?? null)
+                ? $vendorData['registration_documents']
+                : []);
 
             return response()->json([
                 'success' => true,

@@ -351,9 +351,18 @@ window.viewVendor = function(id) {
 
         /* ── documents ── */
         const docs = v.registration_documents || {};
+        const docUrls = v.document_urls || {};
         function renderDocEntry(label, filePath, fileName) {
             const ext  = (filePath || '').split('.').pop().toUpperCase();
-            const url  = '/storage/' + filePath;
+            // Resolved server-side via Storage::url(), so this follows the public disk
+            // (local or S3). Never rebuild it as '/storage/' + path.
+            const url  = docUrls[filePath] || '';
+            if (!url) {
+                return `<div class="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-red-50 border border-red-200">
+                            <i class="fas fa-triangle-exclamation text-red-500 text-base flex-shrink-0"></i>
+                            <span class="flex-1 text-sm font-medium text-red-800">${escapeHtml(label)} — file missing from storage</span>
+                        </div>`;
+            }
             const isImg = ['JPG','JPEG','PNG','GIF','WEBP'].includes(ext);
             const isPdf = ext === 'PDF';
             const iconCls = isPdf ? 'fa-file-pdf text-red-500' : (isImg ? 'fa-file-image text-blue-500' : 'fa-file-alt text-gray-500');

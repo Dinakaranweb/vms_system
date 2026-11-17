@@ -627,11 +627,15 @@ function viewVendor(id){
     fetch(`/admin/vendors/${id}`).then(r=>r.json()).then(({success,vendor})=>{
         if(!success||!vendor){ box.innerHTML='<p class="vd-error">Failed to load vendor details.</p>'; return; }
         const docs=vendor.registration_documents||{};
+        const docUrls=vendor.document_urls||{};
         const docLinks=[];
         function makeDocLink(label,filePath,fileName){
             const ext=(filePath||'').split('.').pop().toUpperCase();
             const display=fileName?`${label} — ${fileName}`:label;
-            return `<a href="/storage/${filePath}" target="_blank" class="vd-doc-link"><i class="fas fa-file-alt vd-doc-ico"></i>${display}<span class="vd-doc-ext">${ext} &nbsp;<i class="fas fa-external-link-alt"></i></span></a>`;
+            // Resolved server-side via Storage::url() so it follows the public disk.
+            const url=docUrls[filePath]||'';
+            if(!url){ return `<span class="vd-doc-link" style="color:#b91c1c;cursor:default"><i class="fas fa-triangle-exclamation vd-doc-ico"></i>${display} <span class="vd-doc-ext">missing</span></span>`; }
+            return `<a href="${url}" target="_blank" class="vd-doc-link"><i class="fas fa-file-alt vd-doc-ico"></i>${display}<span class="vd-doc-ext">${ext} &nbsp;<i class="fas fa-external-link-alt"></i></span></a>`;
         }
         Object.entries(docs).forEach(([type,value])=>{
             const label=type.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());

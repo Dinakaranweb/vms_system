@@ -173,7 +173,7 @@
             <p class="mt-8 text-center text-xs text-slate-500">
                 <span class="lg:hidden">&copy; {{ date('Y') }} VMS Portal &middot; </span>
                 Designed &amp; Developed by
-                <a href="https://vmrfdu.edu.in" target="_blank" rel="noopener" class="ap-link font-medium">VMRF(DU) IT Team</a>
+                <a href="https://vmrfdu.edu.in" target="_blank" rel="noopener" class="ap-link font-medium">VMRF(DU) IT Team - Salem</a>
             </p>
         </div>
     </main>

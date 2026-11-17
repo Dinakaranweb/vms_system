@@ -35,7 +35,7 @@
             </p>
             <!-- Credit line - bold and eye-catching with blue color -->
             <p class="text-blue-600 font-bold text-base mt-1">
-                Designed & Developed by VMRF(DU) IT Team
+                Designed & Developed by VMRF(DU) IT Team - Salem
             </p>
         </div>
     </footer>

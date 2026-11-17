@@ -29,26 +29,26 @@ class ApplicationController extends Controller
         $tenderType   = in_array($request->tender_type, ['online', 'postal', 'hybrid']) ? $request->tender_type : 'online';
 
         if ($user->hasRole('super-admin') || $user->hasRole('admin')) {
-            $tenders = Tender::where('tender_type', $tenderType)->orderBy('title')->get(['id', 'title', 'tender_number']);
+            $tenders = Tender::submissionTab($tenderType)->orderBy('title')->get(['id', 'title', 'tender_number']);
             $query   = TenderApplication::with(['tender', 'vendor'])
-                           ->whereHas('tender', fn($q) => $q->where('tender_type', $tenderType))
+                           ->whereHas('tender', fn($q) => $q->submissionTab($tenderType))
                            ->orderBy('created_at', 'desc');
         } elseif ($user->hasRole('tender-owner')) {
-            $tenders = $user->ownedTenders()->where('tender_type', $tenderType)->orderBy('title')->get(['id', 'title', 'tender_number']);
+            $tenders = $user->ownedTenders()->submissionTab($tenderType)->orderBy('title')->get(['id', 'title', 'tender_number']);
             $query   = TenderApplication::whereIn('tender_id', $tenders->pluck('id'))
                            ->with(['tender', 'vendor'])->orderBy('created_at', 'desc');
         } elseif (method_exists($user, 'committeeTenders') && $user->committeeTenders()->exists()) {
             $committeeIds = $user->committeeTenders()->wherePivot('is_active', true)->pluck('tender_id');
-            $tenders = Tender::whereIn('id', $committeeIds)->where('tender_type', $tenderType)->orderBy('title')->get(['id', 'title', 'tender_number']);
+            $tenders = Tender::whereIn('id', $committeeIds)->submissionTab($tenderType)->orderBy('title')->get(['id', 'title', 'tender_number']);
             $query   = TenderApplication::whereIn('tender_id', $committeeIds)
-                           ->whereHas('tender', fn($q) => $q->where('tender_type', $tenderType))
+                           ->whereHas('tender', fn($q) => $q->submissionTab($tenderType))
                            ->with(['tender', 'vendor'])->orderBy('created_at', 'desc');
         } else {
             $tenders = collect();
             $vendor  = $user->vendor;
             $query   = $vendor
                 ? TenderApplication::where('vendor_id', $vendor->id)
-                      ->whereHas('tender', fn($q) => $q->where('tender_type', $tenderType))
+                      ->whereHas('tender', fn($q) => $q->submissionTab($tenderType))
                       ->with(['tender', 'vendor'])->orderBy('created_at', 'desc')
                 : TenderApplication::whereRaw('0=1');
         }
@@ -62,7 +62,7 @@ class ApplicationController extends Controller
 
         $applications = $query->paginate(15)->withQueryString();
 
-        $typeScope = TenderApplication::whereHas('tender', fn($q) => $q->where('tender_type', $tenderType));
+        $typeScope = TenderApplication::whereHas('tender', fn($q) => $q->submissionTab($tenderType));
         $stats = [
             'total'       => (clone $typeScope)->count(),
             'submitted'   => (clone $typeScope)->where('status', 'submitted')->count(),

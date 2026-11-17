@@ -112,7 +112,7 @@
         <div class="px-6 py-4 {{ $tenderType === 'online' ? 'bg-gradient-to-r from-blue-600 to-indigo-600' : 'bg-gradient-to-r from-yellow-500 to-orange-500' }}">
             <h3 class="text-lg font-semibold text-white flex items-center gap-2">
                 <i class="fas {{ $tenderType === 'online' ? 'fa-globe' : 'fa-envelope' }}"></i>
-                {{ $tenderType === 'online' ? 'Online Tender' : 'Postal Tender' }} Applications
+                {{ $tenderType === 'online' ? 'Online & Hybrid' : 'Postal & Hybrid' }} Tender Applications
                 @if($tenderId && $tenders->count())
                     <span class="text-sm font-normal opacity-80">— {{ $tenders->firstWhere('id', $tenderId)?->title ?? '' }}</span>
                 @endif
@@ -140,7 +140,12 @@
                     @forelse($applications as $app)
                     <tr class="hover:bg-gray-50">
                         <td class="px-6 py-4 text-sm font-mono font-medium text-gray-900">{{ $app->application_number }}</td>
-                        <td class="px-6 py-4 text-sm text-gray-900">{{ Str::limit($app->tender->title ?? 'N/A', 30) }}</td>
+                        <td class="px-6 py-4 text-sm text-gray-900">
+                            {{ Str::limit($app->tender->title ?? 'N/A', 30) }}
+                            @if($app->tender && $app->tender->isHybrid())
+                            <span class="ml-1 px-1.5 py-0.5 bg-teal-100 text-teal-800 rounded text-[0.65rem] align-middle">Hybrid</span>
+                            @endif
+                        </td>
                         <td class="px-6 py-4 text-sm text-gray-600">{{ $app->vendor->company_name ?? 'N/A' }}</td>
                         @if($tenderType === 'online')
                         <td class="px-6 py-4 text-sm font-semibold text-green-600">

@@ -47,7 +47,9 @@
                 <div>
                     <div class="flex items-center gap-2 mb-1">
                         <span class="px-2 py-0.5 bg-white bg-opacity-20 text-white text-xs rounded-full">{{ $tender->tender_number }}</span>
-                        @if($tender->isPostal())
+                        @if($tender->isHybrid())
+                        <span class="px-2 py-0.5 bg-teal-300 text-teal-900 text-xs rounded-full font-semibold">Hybrid Tender &mdash; Online + Postal</span>
+                        @elseif($tender->isPostal())
                         <span class="px-2 py-0.5 bg-yellow-400 text-yellow-900 text-xs rounded-full font-semibold">Postal Tender</span>
                         @else
                         <span class="px-2 py-0.5 bg-green-400 text-green-900 text-xs rounded-full font-semibold">Online Tender</span>
@@ -129,7 +131,7 @@
             </div>
             @endif
 
-            @if($tender->isPostal())
+            @if($tender->hasPostalBids())
             <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
                 <i class="fas fa-lock text-amber-500 text-lg mt-0.5 flex-shrink-0"></i>
                 <div>
@@ -413,9 +415,9 @@
                 <div class="p-6 space-y-6">
 
                     @php
-                        $requireBid  = ($tender->require_bid_amount  ?? true) && $tender->isOnline();
-                        $requireTech = ($tender->require_technical_bid ?? true) && $tender->isOnline();
-                        $requireFin  = ($tender->require_financial_bid ?? true) && $tender->isOnline();
+                        $requireBid  = ($tender->require_bid_amount  ?? true) && $tender->hasOnlineBids();
+                        $requireTech = ($tender->require_technical_bid ?? true) && $tender->hasOnlineBids();
+                        $requireFin  = ($tender->require_financial_bid ?? true) && $tender->hasOnlineBids();
                     @endphp
 
                     {{-- Bid Amount — online only --}}
@@ -445,12 +447,12 @@
                             @endif
                         </div>
                     </div>
-                    @elseif($tender->isOnline())
+                    @elseif($tender->hasOnlineBids())
                     <input type="hidden" name="bid_amount" value="0">
                     @endif
 
                     {{-- Technical Proposal — online only --}}
-                    @if($tender->isOnline())
+                    @if($tender->hasOnlineBids())
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">
                             Technical Proposal
@@ -507,7 +509,7 @@
                     @endif
 
                     {{-- Online: document upload --}}
-                    @if($tender->isOnline())
+                    @if($tender->hasOnlineBids())
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-2">
                             <i class="fas fa-paperclip text-green-600 mr-1"></i>Supporting Documents
@@ -526,7 +528,7 @@
                     @endif
 
                     {{-- Postal: address confirmation --}}
-                    @if($tender->isPostal())
+                    @if($tender->hasPostalBids())
                     <div class="bg-yellow-50 border border-yellow-300 rounded-xl p-5">
                         <div class="flex items-start gap-3">
                             <i class="fas fa-map-marker-alt text-yellow-600 text-xl mt-0.5"></i>
@@ -569,7 +571,7 @@
                             <li>I have downloaded and reviewed all tender documents</li>
                             <li>I am authorised to submit this application on behalf of the company</li>
                             <li>I understand that false information may lead to disqualification</li>
-                            @if($tender->isPostal())
+                            @if($tender->hasPostalBids())
                             <li>
                                 I will send physical documents to the postal address
                                 @if($tender->postal_receipt_deadline)

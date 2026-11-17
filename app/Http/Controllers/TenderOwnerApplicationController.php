@@ -23,7 +23,7 @@ class TenderOwnerApplicationController extends Controller
         $tenderType = in_array($request->tender_type, ['online', 'postal', 'hybrid']) ? $request->tender_type : 'online';
 
         $allTenderIds  = $user->ownedTenders()->pluck('id');
-        $typeTenderIds = $user->ownedTenders()->where('tender_type', $tenderType)->pluck('id');
+        $typeTenderIds = $user->ownedTenders()->submissionTab($tenderType)->pluck('id');
 
         $query = TenderApplication::with(['tender', 'vendor'])
             ->whereIn('tender_id', $typeTenderIds);
@@ -46,7 +46,7 @@ class TenderOwnerApplicationController extends Controller
             'awarded'     => (clone $typeScope)->where('status', 'awarded')->count(),
         ];
 
-        $tenders = $user->ownedTenders()->where('tender_type', $tenderType)->get();
+        $tenders = $user->ownedTenders()->submissionTab($tenderType)->get();
 
         return view('tender-owner.applications.index', compact('applications', 'stats', 'tenders', 'tenderType'));
     }

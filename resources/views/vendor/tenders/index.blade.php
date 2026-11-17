@@ -54,7 +54,7 @@
     <div class="bg-white rounded-xl shadow-sm overflow-hidden">
         <div class="px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-600">
             <h3 class="text-lg font-semibold text-white">
-                <i class="fas fa-list mr-2"></i>{{ ($type ?? 'online') === 'postal' ? 'Postal' : 'Online' }} Tenders
+                <i class="fas fa-list mr-2"></i>{{ ($type ?? 'online') === 'postal' ? 'Postal & Hybrid' : 'Online & Hybrid' }} Tenders
             </h3>
         </div>
         
@@ -70,7 +70,9 @@
                                     <i class="fas fa-lock text-xs"></i> Private
                                 </span>
                             @endif
-                            @if($tender->isPostal())
+                            @if($tender->isHybrid())
+                                <span class="px-2 py-1 bg-teal-100 text-teal-800 rounded-full text-xs">Hybrid &mdash; online + postal</span>
+                            @elseif($tender->isPostal())
                                 <span class="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs">Postal</span>
                             @endif
                             @if($tender->submission_deadline->diffInDays(now()) <= 7)

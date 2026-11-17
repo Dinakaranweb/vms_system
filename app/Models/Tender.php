@@ -250,6 +250,24 @@ class Tender extends Model
         return $query->whereIn('tender_type', ['postal', 'hybrid']);
     }
 
+    /**
+     * Filter by the submission-mode tab the UI actually shows.
+     *
+     * Every one of these screens offers exactly two tabs, Online and Postal, with no third
+     * tab for hybrid. Exact-matching tender_type therefore made hybrid tenders unreachable
+     * from any tab at all. A hybrid tender genuinely accepts both an online submission and
+     * physical documents by post, so it belongs under both; 'hybrid' is still accepted to
+     * honour a direct ?type=hybrid link.
+     */
+    public function scopeSubmissionTab($query, ?string $tab)
+    {
+        return match ($tab) {
+            'postal' => $query->withPostalBids(),   // postal + hybrid
+            'hybrid' => $query->hybrid(),           // hybrid only
+            default  => $query->withOnlineBids(),   // online + hybrid
+        };
+    }
+
     // ==================== HELPER METHODS ====================
     
     public function isOpen(): bool

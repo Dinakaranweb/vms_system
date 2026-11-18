@@ -88,6 +88,14 @@
 
         {{-- Right: Proposals --}}
         <div class="lg:col-span-2 space-y-4">
+            @php $submissionSealed = $application->tender && $application->tender->areSubmissionsSealed(); @endphp
+            @if($submissionSealed)
+            {{-- The financial proposal is the bid price in prose; it stays sealed with
+                 everything else until the committee's codes have opened the tender. --}}
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                @include('partials.sealed-submission-notice', ['tender' => $application->tender, 'label' => 'proposal'])
+            </div>
+            @else
             @if($application->technical_proposal)
             <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 <div class="px-5 py-3 border-b border-gray-100 bg-gray-50">
@@ -109,6 +117,7 @@
                 </div>
             </div>
             @endif
+            @endif
 
             @if($application->admin_remarks)
             <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -128,6 +137,11 @@
                         Documents ({{ count($application->documents) }})
                     </h4>
                 </div>
+                @if($submissionSealed)
+                <div class="px-5 py-4">
+                    @include('partials.sealed-submission-notice', ['tender' => $application->tender, 'count' => count($application->documents), 'label' => 'document set'])
+                </div>
+                @else
                 <div class="px-5 py-4 space-y-2">
                     @foreach($application->documents as $doc)
                     <div class="flex items-center gap-3 p-2.5 bg-gray-50 rounded-lg border border-gray-100">
@@ -140,6 +154,7 @@
                     </div>
                     @endforeach
                 </div>
+                @endif
             </div>
             @endif
         </div>

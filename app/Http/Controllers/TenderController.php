@@ -634,8 +634,10 @@ class TenderController extends Controller
         }
 
         if (!$tender->canBeOpened()) {
-            $reason = $tender->isBidOpen() ? 'Bids for this tender have already been opened.' : 'This tender must be closed before bids can be opened.';
-            return response()->json(['success' => false, 'message' => $reason], 400);
+            return response()->json([
+                'success' => false,
+                'message' => $tender->openingBlockedReason() ?? 'This tender cannot be opened yet.',
+            ], 400);
         }
 
         $members = PurchaseCommitteeMember::active()->ordered()->get();

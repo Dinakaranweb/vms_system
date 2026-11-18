@@ -36,6 +36,11 @@
                     <a href="{{ route('purchase-committee.review.opening-codes', $tender->id) }}" class="bg-amber-50 text-amber-700 border border-amber-200 px-4 py-2 rounded-lg text-sm inline-flex items-center hover:bg-amber-100 transition">
                         <i class="fas fa-hourglass-half mr-2"></i>Enter Committee Codes ({{ $tender->openingOtpsVerifiedCount() }}/{{ $tender->openingOtpsIssuedCount() }})
                     </a>
+                    @elseif(!$tender->isBidOpen() && $tender->isClosed() && !$tender->hasOpeningMomentArrived())
+                    <span class="bg-slate-50 text-slate-600 border border-slate-200 px-4 py-2 rounded-lg text-sm inline-flex items-center"
+                          title="{{ $tender->openingBlockedReason() }}">
+                        <i class="fas fa-hourglass-start mr-2"></i>Opens {{ $tender->openingMoment()->format('d M Y, h:i A') }}
+                    </span>
                     @elseif($tender->isBidOpen())
                     <span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-2 rounded-lg text-sm inline-flex items-center">
                         <i class="fas fa-envelope-open-text mr-2"></i>Bids opened {{ $tender->bid_opening_at->format('d M Y, h:i A') }}

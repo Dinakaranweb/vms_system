@@ -48,13 +48,17 @@
            class="px-5 py-2 rounded-lg font-medium text-sm transition {{ ($type ?? 'online') === 'postal' ? 'bg-yellow-500 text-white shadow' : 'bg-white text-gray-700 border hover:bg-gray-50' }}">
             <i class="fas fa-envelope mr-1"></i> Postal Tenders
         </a>
+        <a href="{{ route('vendor.tenders') }}?type=hybrid"
+           class="px-5 py-2 rounded-lg font-medium text-sm transition {{ ($type ?? 'online') === 'hybrid' ? 'bg-teal-600 text-white shadow' : 'bg-white text-gray-700 border hover:bg-gray-50' }}">
+            <i class="fas fa-layer-group mr-1"></i> Hybrid Tenders
+        </a>
     </div>
 
     <!-- Tenders List -->
     <div class="bg-white rounded-xl shadow-sm overflow-hidden">
         <div class="px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-600">
             <h3 class="text-lg font-semibold text-white">
-                <i class="fas fa-list mr-2"></i>{{ ($type ?? 'online') === 'postal' ? 'Postal & Hybrid' : 'Online & Hybrid' }} Tenders
+                <i class="fas fa-list mr-2"></i>{{ ['online' => 'Online', 'postal' => 'Postal', 'hybrid' => 'Hybrid (Online + Postal)'][$type ?? 'online'] ?? 'Online' }} Tenders
             </h3>
         </div>
         

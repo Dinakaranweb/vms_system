@@ -19,18 +19,23 @@
                       {{ $tenderType === 'postal' ? 'border-yellow-500 text-yellow-600 bg-yellow-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50' }}">
                 <i class="fas fa-envelope"></i> Postal Tenders
             </a>
+            <a href="{{ route('tender-owner.applications.index') }}?tender_type=hybrid"
+               class="flex items-center gap-2 px-7 py-4 text-sm font-semibold border-b-2 transition
+                      {{ $tenderType === 'hybrid' ? 'border-teal-600 text-teal-700 bg-teal-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50' }}">
+                <i class="fas fa-layer-group"></i> Hybrid Tenders
+            </a>
         </div>
     </div>
 
     {{-- ===== STATS ===== --}}
     <div class="grid grid-cols-1 md:grid-cols-5 gap-6">
-        <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 {{ $tenderType === 'online' ? 'border-blue-500' : 'border-yellow-500' }}">
+        <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 {{ ['online' => 'border-blue-500', 'postal' => 'border-yellow-500', 'hybrid' => 'border-teal-500'][$tenderType] ?? 'border-blue-500' }}">
             <div class="flex justify-between items-center">
                 <div>
                     <p class="text-gray-500 text-sm">Total Applications</p>
                     <p class="text-2xl font-bold text-gray-800">{{ $stats['total'] }}</p>
                 </div>
-                <i class="fas fa-file-alt text-3xl {{ $tenderType === 'online' ? 'text-blue-500' : 'text-yellow-500' }}"></i>
+                <i class="fas fa-file-alt text-3xl {{ ['online' => 'text-blue-500', 'postal' => 'text-yellow-500', 'hybrid' => 'text-teal-500'][$tenderType] ?? 'text-blue-500' }}"></i>
             </div>
         </div>
         <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-yellow-500">
@@ -110,10 +115,10 @@
 
     {{-- ===== TABLE ===== --}}
     <div class="bg-white rounded-xl shadow-sm overflow-hidden">
-        <div class="px-6 py-4 {{ $tenderType === 'online' ? 'bg-gradient-to-r from-blue-600 to-indigo-600' : 'bg-gradient-to-r from-yellow-500 to-orange-500' }}">
+        <div class="px-6 py-4 {{ ['online' => 'bg-gradient-to-r from-blue-600 to-indigo-600', 'postal' => 'bg-gradient-to-r from-yellow-500 to-orange-500', 'hybrid' => 'bg-gradient-to-r from-teal-600 to-cyan-600'][$tenderType] ?? 'bg-gradient-to-r from-blue-600 to-indigo-600' }}">
             <h3 class="text-lg font-semibold text-white flex items-center gap-2">
-                <i class="fas {{ $tenderType === 'online' ? 'fa-globe' : 'fa-envelope' }}"></i>
-                {{ $tenderType === 'online' ? 'Online & Hybrid' : 'Postal & Hybrid' }} Tender Applications
+                <i class="fas {{ ['online' => 'fa-globe', 'postal' => 'fa-envelope', 'hybrid' => 'fa-layer-group'][$tenderType] ?? 'fa-globe' }}"></i>
+                {{ ['online' => 'Online', 'postal' => 'Postal', 'hybrid' => 'Hybrid'][$tenderType] ?? 'Online' }} Tender Applications
                 <span class="ml-auto text-sm font-normal opacity-75">({{ $applications->total() }} total)</span>
             </h3>
         </div>
@@ -124,7 +129,7 @@
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">App. No.</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tender</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vendor</th>
-                        @if($tenderType === 'online')
+                        @if($tenderType !== 'postal')
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Bid Amount</th>
                         @else
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Submission</th>
@@ -145,7 +150,7 @@
                             @endif
                         </td>
                         <td class="px-6 py-4 text-sm text-gray-600">{{ $app->vendor->company_name ?? 'N/A' }}</td>
-                        @if($tenderType === 'online')
+                        @if($tenderType !== 'postal')
                         <td class="px-6 py-4 text-sm font-semibold text-green-600">
                             @if($app->tender && !$app->tender->isBidOpen())
                                 <span class="text-gray-400 font-normal text-xs"><i class="fas fa-lock mr-1"></i>Sealed</span>
@@ -198,7 +203,7 @@
                     @empty
                     <tr>
                         <td colspan="7" class="px-6 py-12 text-center text-gray-500">
-                            <i class="fas {{ $tenderType === 'online' ? 'fa-globe' : 'fa-envelope' }} text-4xl mb-3 block opacity-30"></i>
+                            <i class="fas {{ ['online' => 'fa-globe', 'postal' => 'fa-envelope', 'hybrid' => 'fa-layer-group'][$tenderType] ?? 'fa-globe' }} text-4xl mb-3 block opacity-30"></i>
                             No {{ $tenderType }} tender applications found.
                         </td>
                     </tr>

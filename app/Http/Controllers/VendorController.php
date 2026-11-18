@@ -119,11 +119,9 @@ class VendorController extends Controller
               });
         });
 
-        // A hybrid tender accepts BOTH an online submission and physical documents by post,
-        // so it has to appear under both tabs. Exact-matching tender_type hid every hybrid
-        // tender from vendors completely: the default tab is 'online', and 'hybrid' equals
-        // neither 'online' nor 'postal'. withOnlineBids()/withPostalBids() are the inclusive
-        // forms and are what every other hybrid-aware query in the app already uses.
+        // Hybrid is run as its own procedure, so it gets its own tab rather than being mixed
+        // into the other two: each tab maps to exactly one tender_type. An unrecognised ?type
+        // falls back to 'online' so a stale or hand-edited link cannot empty the list.
         $type = request('type', 'online');
 
         if (! in_array($type, ['online', 'postal', 'hybrid'], true)) {

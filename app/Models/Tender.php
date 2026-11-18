@@ -251,20 +251,21 @@ class Tender extends Model
     }
 
     /**
-     * Filter by the submission-mode tab the UI actually shows.
+     * Filter by the submission-mode tab the UI shows.
      *
-     * Every one of these screens offers exactly two tabs, Online and Postal, with no third
-     * tab for hybrid. Exact-matching tender_type therefore made hybrid tenders unreachable
-     * from any tab at all. A hybrid tender genuinely accepts both an online submission and
-     * physical documents by post, so it belongs under both; 'hybrid' is still accepted to
-     * honour a direct ?type=hybrid link.
+     * Each of these screens now offers three tabs - Online, Postal and Hybrid - so every tab
+     * maps to exactly one tender_type. A hybrid tender is run as its own procedure rather
+     * than as an online tender that also takes post, so it is listed on its own tab and not
+     * mixed into the other two. withOnlineBids()/withPostalBids() remain for the places that
+     * genuinely ask "does this tender involve online/postal bids at all", such as deciding
+     * which fields the apply form renders.
      */
     public function scopeSubmissionTab($query, ?string $tab)
     {
         return match ($tab) {
-            'postal' => $query->withPostalBids(),   // postal + hybrid
-            'hybrid' => $query->hybrid(),           // hybrid only
-            default  => $query->withOnlineBids(),   // online + hybrid
+            'postal' => $query->postal(),
+            'hybrid' => $query->hybrid(),
+            default  => $query->online(),
         };
     }
 
@@ -337,12 +338,82 @@ class Tender extends Model
     }
 
     /**
-     * Bid opening can only happen manually, and only after the tender has actually closed
-     * (deadline passed or status already 'closed') — never before, regardless of who clicks it.
+     * The exact moment this tender is scheduled to be opened: opening_date, at opening_time
+     * when one was recorded, otherwise the start of that day. Null when no opening date is on
+     * record - opening_date is nullable and both create forms treat it as optional.
+     */
+    public function openingMoment(): ?\Carbon\Carbon
+    {
+        if ($this->opening_date === null) {
+            return null;
+        }
+
+        $moment = \Carbon\Carbon::parse($this->opening_date)->startOfDay();
+
+        if (!empty($this->opening_time)) {
+            [$h, $m, $s] = array_pad(explode(':', (string) $this->opening_time), 3, '0');
+            $moment->setTime((int) $h, (int) $m, (int) $s);
+        }
+
+        return $moment;
+    }
+
+    /**
+     * A tender with no opening date on record falls back to the submission deadline alone, so
+     * tenders created before an opening date was expected cannot be stranded unopenable.
+     */
+    public function hasOpeningMomentArrived(): bool
+    {
+        $moment = $this->openingMoment();
+
+        return $moment === null || !$moment->isFuture();
+    }
+
+    /**
+     * Bid opening can only happen manually, only after the tender has actually closed
+     * (deadline passed or status already 'closed'), and only once the scheduled opening
+     * moment has arrived - never before, regardless of who clicks it.
      */
     public function canBeOpened(): bool
     {
-        return !$this->isBidOpen() && $this->isClosed();
+        return !$this->isBidOpen()
+            && $this->isClosed()
+            && $this->hasOpeningMomentArrived();
+    }
+
+    /**
+     * Why opening is unavailable right now, so the API and every screen give one answer.
+     * Null when the tender can in fact be opened.
+     */
+    public function openingBlockedReason(): ?string
+    {
+        if ($this->isBidOpen()) {
+            return 'Bids for this tender have already been opened.';
+        }
+
+        if (!$this->isClosed()) {
+            return 'This tender must be closed before bids can be opened.';
+        }
+
+        if (!$this->hasOpeningMomentArrived()) {
+            return 'This tender cannot be opened before its scheduled opening on '
+                . $this->openingMoment()->format('d M Y, h:i A') . '.';
+        }
+
+        return null;
+    }
+
+    /**
+     * Whether what the vendors submitted is still sealed.
+     *
+     * Everything a vendor sent in - the bid amount and the uploaded documents alike - stays
+     * unreadable to staff until the Purchase Committee has opened the tender by entering all
+     * of their codes, which canBeOpened() will not permit before the scheduled opening
+     * moment. Vendors always see their own submission; this governs the staff-facing screens.
+     */
+    public function areSubmissionsSealed(): bool
+    {
+        return !$this->isBidOpen();
     }
 
     /**

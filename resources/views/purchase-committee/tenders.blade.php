@@ -25,7 +25,7 @@
                         <div class="flex items-center gap-2 flex-wrap mb-1">
                             <p class="font-semibold text-gray-900">{{ $tender->title }}</p>
                             <span class="text-xs px-2 py-0.5 rounded-full font-medium {{ $tender->status === 'published' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600' }}">{{ ucfirst($tender->status) }}</span>
-                            <span class="text-xs px-2 py-0.5 rounded-full font-medium {{ $tender->tender_type === 'online' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700' }}">{{ ucfirst($tender->tender_type) }}</span>
+                            <span class="text-xs px-2 py-0.5 rounded-full font-medium {{ ['online' => 'bg-blue-100 text-blue-700', 'postal' => 'bg-amber-100 text-amber-700', 'hybrid' => 'bg-teal-100 text-teal-700'][$tender->tender_type] ?? 'bg-gray-100 text-gray-700' }}">{{ ucfirst($tender->tender_type) }}</span>
                             @if($tender->isBidOpen())
                             <span class="text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-100 text-emerald-700"><i class="fas fa-envelope-open mr-1"></i>Bids Opened</span>
                             @endif
@@ -56,6 +56,11 @@
                             <a href="{{ route('purchase-committee.review.opening-codes', $tender->id) }}" class="text-xs text-gray-400 hover:text-indigo-600 hover:underline">
                                 {{ $tender->openingOtpsVerifiedCount() }}/{{ $tender->openingOtpsIssuedCount() }} codes collected
                             </a>
+                        @elseif(!$tender->isBidOpen() && $tender->isClosed() && !$tender->hasOpeningMomentArrived())
+                        <span class="text-xs bg-slate-50 text-slate-600 border border-slate-200 px-3 py-1.5 rounded-lg inline-flex items-center gap-1"
+                              title="{{ $tender->openingBlockedReason() }}">
+                            <i class="fas fa-hourglass-start"></i> Opens {{ $tender->openingMoment()->format('d M, h:i A') }}
+                        </span>
                         @elseif($tender->isBidOpen() && $tender->isReviewUnlockedFor(auth()->id()))
                         @php $tFinal = \App\Models\AwardFinalization::activeFor($tender->id); @endphp
                         @if($tFinal)

@@ -507,6 +507,11 @@
                     <i class="fas fa-envelope"></i>
                     <span>Postal Tenders</span>
                 </a>
+                <a href="{{ route('vendor.tenders') }}?type=hybrid"
+                   class="nav-link {{ request()->routeIs('vendor.tenders') && request('type') === 'hybrid' ? 'active' : '' }}">
+                    <i class="fas fa-layer-group"></i>
+                    <span>Hybrid Tenders</span>
+                </a>
                 <a href="{{ route('vendor.applications') }}"
                    class="nav-link {{ request()->routeIs('vendor.applications*') ? 'active' : '' }}">
                     <i class="fas fa-file-alt"></i>

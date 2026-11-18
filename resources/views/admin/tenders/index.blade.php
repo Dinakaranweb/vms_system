@@ -659,6 +659,11 @@
                      title="Collect committee codes — {{ $tender->openingOtpsVerifiedCount() }} of {{ $tender->openingOtpsIssuedCount() }} entered">
                     <i class="fas fa-hourglass-half"></i>
                   </a>
+                @elseif(!$tender->isBidOpen() && $tender->isClosed() && !$tender->hasOpeningMomentArrived())
+                  <span class="tm-action-btn" style="color:#94a3b8;cursor:not-allowed;"
+                        title="{{ $tender->openingBlockedReason() }}">
+                    <i class="fas fa-hourglass-start"></i>
+                  </span>
                 @elseif($tender->isBidOpen())
                   <span class="tm-action-btn" style="color:#059669;cursor:default;" title="Bids opened {{ $tender->bid_opening_at->format('d M Y, h:i A') }}">
                     <i class="fas fa-envelope-open"></i>

@@ -44,6 +44,15 @@
             <label class="text-xs text-gray-500 uppercase">Submitted On</label>
             <p class="text-gray-900">{{ $application->created_at->format('d M, Y H:i') }}</p>
         </div>
+        @php $submissionSealed = $application->tender && $application->tender->areSubmissionsSealed(); @endphp
+        @if($submissionSealed)
+        {{-- Sealing the bid amount alone was never enough: the financial proposal carries the
+             same price, both in prose and as a downloadable file. The whole submission is
+             withheld until the Purchase Committee opens the tender. --}}
+        <div class="col-span-2">
+            @include('partials.sealed-submission-notice', ['tender' => $application->tender, 'label' => 'proposal'])
+        </div>
+        @else
         <div class="col-span-2">
             <label class="text-xs text-gray-500 uppercase">Technical Proposal</label>
             @if($application->technical_proposal && trim($application->technical_proposal) !== '')
@@ -84,6 +93,7 @@
                 <p class="text-gray-400 italic text-sm mt-1">Not provided</p>
             @endif
         </div>
+        @endif
         @if($application->rejection_reason)
         <div class="col-span-2 bg-red-50 rounded-lg p-3">
             <label class="text-xs text-red-600 uppercase">Rejection Reason</label>
@@ -150,6 +160,9 @@
         <h4 class="font-semibold text-gray-800 mb-3">
             <i class="fas fa-file-upload mr-2 text-green-600"></i>Application Documents ({{ count($application->documents) }})
         </h4>
+        @if($submissionSealed)
+        @include('partials.sealed-submission-notice', ['tender' => $application->tender, 'count' => count($application->documents), 'label' => 'document set'])
+        @else
         <div class="space-y-2">
             @foreach($application->documents as $index => $doc)
             <div class="flex items-center justify-between bg-gray-50 rounded-lg p-3 hover:bg-gray-100 transition">
@@ -191,6 +204,7 @@
             </div>
             @endforeach
         </div>
+        @endif
     </div>
     @endif
     

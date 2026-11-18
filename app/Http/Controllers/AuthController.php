@@ -220,11 +220,20 @@ class AuthController extends Controller
                 \Log::error('Vendor registration email failed: ' . $e->getMessage());
             }
 
-            // Acknowledge the vendor's own registration
-            try {
-                Mail::to($vendor->email)->send(new VendorRegistrationAcknowledgementMail($vendor));
-            } catch (\Exception $e) {
-                \Log::error('Vendor registration acknowledgement email failed: ' . $e->getMessage());
+            // Acknowledge the vendor's own registration. Address taken from the vendor row
+            // when it has one and the login otherwise, so a blank vendors.email can never
+            // swallow the welcome message the way it swallowed approval mail.
+            $vendorAddress = trim((string) ($vendor->email ?: $user->email));
+
+            if ($vendorAddress === '') {
+                \Log::warning("Vendor registration acknowledgement skipped: vendor {$vendor->id} has no address.");
+            } else {
+                try {
+                    Mail::to($vendorAddress)->send(new VendorRegistrationAcknowledgementMail($vendor));
+                    \Log::info("Vendor registration acknowledgement sent to {$vendorAddress} for vendor {$vendor->id}.");
+                } catch (\Exception $e) {
+                    \Log::error('Vendor registration acknowledgement email failed: ' . $e->getMessage());
+                }
             }
 
             return redirect('/login')->with('success', 'Registration successful! Your application is pending admin approval. You will be notified once approved.');

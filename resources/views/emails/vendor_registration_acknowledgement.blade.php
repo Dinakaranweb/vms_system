@@ -29,25 +29,30 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#f4f6f9;margin:0;padding
     </div>
     <div class="body">
         <p style="font-size:15px;margin-bottom:20px">
-            Your vendor registration has been received successfully. Here's what happens next:
+            Your vendor registration has been received successfully. This email address is now
+            on record for your account, and it will be <strong>verified and approved</strong> by our
+            procurement team along with the rest of your submission. Here's what happens next:
         </p>
 
         <div class="card">
             <h2>Registration Summary</h2>
             <div class="row"><strong>Company Name</strong><span>{{ $vendor->company_name }}</span></div>
             <div class="row"><strong>Vendor Code</strong><span>{{ $vendor->vendor_code }}</span></div>
+            <div class="row"><strong>Registered Email</strong><span>{{ $vendor->email ?: optional($vendor->user)->email }}</span></div>
             <div class="row"><strong>Registered At</strong><span>{{ $vendor->created_at->format('d M Y, h:i A') }}</span></div>
             <div class="row"><strong>Status</strong><span class="badge">Awaiting Approval</span></div>
         </div>
 
         <ol class="steps">
-            <li>Our Admin team will review your submitted details and documents.</li>
-            <li>You'll receive an email as soon as your account is approved.</li>
+            <li>Our procurement team verifies your registered email address, your company details and your uploaded documents.</li>
+            <li>Your account is then approved or returned with the reason, and we email you either way at this address.</li>
             <li>Once approved, you can log in and start participating in tenders — browsing published tenders and submitting your bids.</li>
         </ol>
 
         <p style="font-size:13.5px;color:#475569;line-height:1.6;margin-top:20px">
-            No action is needed from you right now. If any of your details need correction, please contact the procurement team before approval.
+            No action is needed from you right now - you do not need to confirm this email. Please note
+            that you will not be able to sign in until the approval comes through. If any of your details
+            need correction, contact the procurement team before then.
         </p>
 
         <hr class="divider">

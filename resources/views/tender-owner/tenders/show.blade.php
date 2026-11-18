@@ -44,6 +44,11 @@
                           title="{{ $tender->openingBlockedReason() }}">
                         <i class="fas fa-hourglass-start mr-2"></i>Opens {{ $tender->openingMoment()->format('d M Y, h:i A') }}
                     </span>
+                    @elseif($tender->isPublished() && !$tender->isBidOpen())
+                    <span class="bg-slate-50 text-slate-600 border border-slate-200 px-4 py-2 rounded-lg text-sm inline-flex items-center"
+                          title="{{ $tender->openingBlockedReason() }}">
+                        <i class="fas fa-circle-info mr-2"></i>{{ $tender->openingBlockedReason() }}
+                    </span>
                     @elseif($tender->isBidOpen())
                     <span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-2 rounded-lg text-sm inline-flex items-center">
                         <i class="fas fa-envelope-open-text mr-2"></i>Bids opened {{ $tender->bid_opening_at->format('d M Y, h:i A') }}

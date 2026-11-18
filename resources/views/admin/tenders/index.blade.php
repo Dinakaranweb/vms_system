@@ -678,6 +678,13 @@
                      title="Finalize the award — record the chosen applicant and the committee discussion">
                     <i class="fas fa-gavel"></i>
                   </a>
+                @elseif($tender->isPublished())
+                  {{-- Still accepting bids. Without this the Open button simply was not
+                       there and nothing said why, which reads as a bug rather than a rule. --}}
+                  <span class="tm-action-btn" style="color:#94a3b8;cursor:help;"
+                        title="{{ $tender->openingBlockedReason() }} Use Close Tender first, then Open Tender.">
+                    <i class="fas fa-circle-info"></i>
+                  </span>
                 @endif
                 <button onclick="deleteTender({{ $tender->id }})" class="tm-action-btn delete" title="Delete">
                   <i class="fas fa-trash"></i>

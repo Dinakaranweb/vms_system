@@ -14,6 +14,34 @@ use App\Mail\VendorRejectedMail;
 class VendorManagementController extends Controller
 {
     /**
+     * Send a vendor-facing status email.
+     *
+     * Delivery must never undo the status change, so failures are caught - but they
+     * must not be silent either. Previously the admin was told "Vendor approved
+     * successfully!" whether or not the mail went out, so a dead SMTP config or a
+     * vendor with no address on file looked exactly like success. Returns '' when the
+     * message was accepted, or a sentence explaining what went wrong.
+     */
+    private function notifyVendorByMail(Vendor $vendor, callable $makeMailable, string $what): string
+    {
+        if (empty($vendor->email)) {
+            \Log::warning("Vendor {$what} email skipped: vendor {$vendor->id} has no email address on file.");
+
+            return ' However, no email was sent: this vendor has no email address on file.';
+        }
+
+        try {
+            Mail::to($vendor->email)->send($makeMailable());
+
+            return '';
+        } catch (\Throwable $e) {
+            \Log::error("Vendor {$what} email error for vendor {$vendor->id}: " . $e->getMessage());
+
+            return ' However, the notification email to ' . $vendor->email . ' could not be sent.';
+        }
+    }
+
+    /**
      * Flat map of stored document path => resolved public URL.
      *
      * The admin vendor panel is rendered client-side from this JSON, so the browser
@@ -190,16 +218,12 @@ class VendorManagementController extends Controller
                 $vendor->user->update(['is_active' => true]);
             }
 
-            // Notify vendor
-            try {
-                Mail::to($vendor->email)->send(new VendorApprovedMail($vendor));
-            } catch (\Exception $e) {
-                \Log::error('Vendor approved email error: ' . $e->getMessage());
-            }
+            $notice = $this->notifyVendorByMail($vendor, fn () => new VendorApprovedMail($vendor), 'approval');
 
             return response()->json([
-                'success' => true,
-                'message' => 'Vendor approved successfully!'
+                'success'    => true,
+                'message'    => 'Vendor approved successfully!' . $notice,
+                'email_sent' => $notice === '',
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -228,16 +252,12 @@ class VendorManagementController extends Controller
                 $vendor->user->update(['is_active' => false]);
             }
 
-            // Notify vendor
-            try {
-                Mail::to($vendor->email)->send(new VendorRejectedMail($vendor, $request->reason));
-            } catch (\Exception $e) {
-                \Log::error('Vendor rejected email error: ' . $e->getMessage());
-            }
+            $notice = $this->notifyVendorByMail($vendor, fn () => new VendorRejectedMail($vendor, $request->reason), 'rejection');
 
             return response()->json([
-                'success' => true,
-                'message' => 'Vendor rejected successfully!'
+                'success'    => true,
+                'message'    => 'Vendor rejected successfully!' . $notice,
+                'email_sent' => $notice === '',
             ]);
         } catch (\Exception $e) {
             return response()->json([

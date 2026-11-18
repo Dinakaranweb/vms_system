@@ -593,7 +593,7 @@ window.confirmApprove = function() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            showToast('Vendor approved successfully!', 'success');
+            showToast(data.message || 'Vendor approved successfully!', data.email_sent === false ? 'error' : 'success');
             setTimeout(() => location.reload(), 1500);
         } else {
             showToast('Failed to approve vendor', 'error');
@@ -642,7 +642,7 @@ window.confirmReject = function() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            showToast('Vendor rejected successfully!', 'success');
+            showToast(data.message || 'Vendor rejected successfully!', data.email_sent === false ? 'error' : 'success');
             setTimeout(() => location.reload(), 1500);
         } else {
             showToast('Failed to reject vendor', 'error');

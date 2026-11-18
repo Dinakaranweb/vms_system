@@ -304,6 +304,74 @@
             color: #1e293b;
         }
 
+        /* ── Profile menu (topbar, right) ──────────────────── */
+        button.topbar-user {
+            cursor: pointer;
+            font: inherit;
+            transition: background .18s, border-color .18s;
+        }
+        button.topbar-user:hover {
+            background: #f8fafc;
+            border-color: #cbd5e1;
+        }
+        .topbar-user-caret {
+            font-size: 10px;
+            color: #94a3b8;
+            transition: transform .18s;
+        }
+        .topbar-user-caret.open { transform: rotate(180deg); }
+
+        .topbar-user-avatar {
+            width: 38px; height: 38px;
+            background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            color: #fff;
+            font-weight: 700;
+            font-size: 13px;
+            flex-shrink: 0;
+            font-family: 'DM Mono', monospace;
+        }
+
+        .topbar-user-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            padding: 9px 16px;
+            font-size: 13px;
+            font-weight: 500;
+            color: #334155;
+            background: none;
+            border: 0;
+            text-align: left;
+            cursor: pointer;
+            transition: background .15s, color .15s;
+        }
+        .topbar-user-item i {
+            width: 15px;
+            font-size: 13px;
+            color: #94a3b8;
+            text-align: center;
+        }
+        .topbar-user-item:hover { background: #f1f5f9; color: var(--navy); }
+        .topbar-user-item:hover i { color: #475569; }
+        .topbar-user-item.danger { color: #dc2626; }
+        .topbar-user-item.danger i { color: #f87171; }
+        .topbar-user-item.danger:hover { background: #fef2f2; color: #b91c1c; }
+
+        /*
+         * Alpine only strips x-cloak once it has booted, and it is loaded with `defer`.
+         * Without this rule x-cloak does nothing, so every dropdown in this layout
+         * rendered open for a moment on each page load.
+         */
+        [x-cloak] { display: none !important; }
+
+        /* On a narrow screen drop the name, leaving the status dot and caret. */
+        @media (max-width: 575px) {
+            .topbar-user-name { display: none; }
+        }
+
         /* ── Page content ──────────────────────────────────── */
         .main-content {
             flex: 1 0 auto;
@@ -800,6 +868,10 @@
                                 : (auth()->user()->hasRole('management') ? 'management'
                                 : (auth()->user()->hasRole('purchase-committee') ? 'purchase-committee'
                                 : (auth()->user()->hasRole('vendor') ? 'vendor' : 'portal')))));
+
+                    $bellNotifUrl = Route::has($bellPrefix . '.notifications')
+                        ? route($bellPrefix . '.notifications')
+                        : null;
                 @endphp
                 <div class="relative" x-data="{ bellOpen: false }" @click.outside="bellOpen = false">
                     <button class="notif-btn" @click="bellOpen = !bellOpen" aria-label="Notifications">
@@ -895,17 +967,80 @@
                             @endforelse
                         </div>
 
+                        @if($bellNotifUrl)
                         <div class="border-t border-gray-100 px-4 py-2.5 text-center">
-                            <a href="/{{ $bellPrefix }}/notifications" class="text-xs text-blue-600 hover:underline font-medium">
+                            <a href="{{ $bellNotifUrl }}" class="text-xs text-blue-600 hover:underline font-medium">
                                 View all notifications
                             </a>
                         </div>
+                        @endif
                     </div>
                 </div>
 
-                <div class="topbar-user">
-                    <span class="topbar-user-dot"></span>
-                    <span class="topbar-user-name">{{ Auth::user()->name }}</span>
+                @php
+                    $pmUser = Auth::user();
+                    $pmRole = $pmUser->getRoleNames()->first();
+                    // Vendors have their own, much richer profile page (company details, bank
+                    // details, KYC documents); every other role uses the shared one, which is
+                    // the only profile route not gated behind a role.
+                    $pmProfileUrl = ($pmUser->hasRole('vendor') && Route::has('vendor.profile'))
+                        ? route('vendor.profile')
+                        : route('profile.index');
+                @endphp
+                <div class="relative" x-data="{ userOpen: false }"
+                     @click.outside="userOpen = false" @keydown.escape="userOpen = false">
+                    <button type="button" class="topbar-user" @click="userOpen = !userOpen"
+                            :aria-expanded="userOpen ? 'true' : 'false'" aria-haspopup="true"
+                            aria-label="Account menu">
+                        <span class="topbar-user-dot"></span>
+                        <span class="topbar-user-name">{{ $pmUser->name }}</span>
+                        <i class="fas fa-chevron-down topbar-user-caret" :class="{ 'open': userOpen }"></i>
+                    </button>
+
+                    <div x-show="userOpen" x-cloak
+                         x-transition:enter="transition ease-out duration-100"
+                         x-transition:enter-start="opacity-0 scale-95"
+                         x-transition:enter-end="opacity-100 scale-100"
+                         class="absolute right-0 top-full mt-2 bg-white rounded-xl shadow-xl border border-gray-200 z-50"
+                         style="width:250px;">
+
+                        <div class="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
+                            <div class="topbar-user-avatar">{{ strtoupper(substr($pmUser->name, 0, 2)) }}</div>
+                            <div class="min-w-0">
+                                <p class="text-sm font-semibold text-gray-800 truncate" title="{{ $pmUser->name }}">{{ $pmUser->name }}</p>
+                                <p class="text-xs text-gray-500 truncate" title="{{ $pmUser->email }}">{{ $pmUser->email }}</p>
+                                @if($pmRole)
+                                <p class="text-[11px] text-gray-400 mt-0.5">{{ ucwords(str_replace('-', ' ', $pmRole)) }}</p>
+                                @endif
+                            </div>
+                        </div>
+
+                        <div class="py-1">
+                            <a href="{{ $pmProfileUrl }}" class="topbar-user-item">
+                                <i class="fas fa-user-gear"></i>
+                                <span>Profile Settings</span>
+                            </a>
+                            @if($bellNotifUrl)
+                            <a href="{{ $bellNotifUrl }}" class="topbar-user-item">
+                                <i class="fas fa-bell"></i>
+                                <span>Notifications</span>
+                                @if($bellUnread > 0)
+                                <span class="ml-auto text-[11px] font-semibold bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">{{ $bellUnread > 9 ? '9+' : $bellUnread }}</span>
+                                @endif
+                            </a>
+                            @endif
+                        </div>
+
+                        <div class="border-t border-gray-100 py-1">
+                            <form method="POST" action="{{ route('logout') }}">
+                                @csrf
+                                <button type="submit" class="topbar-user-item danger">
+                                    <i class="fas fa-sign-out-alt"></i>
+                                    <span>Logout</span>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
                 </div>
             </div>
         </nav>

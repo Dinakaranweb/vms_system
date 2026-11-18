@@ -24,21 +24,61 @@ class VendorManagementController extends Controller
      */
     private function notifyVendorByMail(Vendor $vendor, callable $makeMailable, string $what): string
     {
-        if (empty($vendor->email)) {
+        $to = $this->vendorMailAddress($vendor);
+
+        if ($to === null) {
             \Log::warning("Vendor {$what} email skipped: vendor {$vendor->id} has no email address on file.");
 
             return ' However, no email was sent: this vendor has no email address on file.';
         }
 
         try {
-            Mail::to($vendor->email)->send($makeMailable());
+            Mail::to($to)->send($makeMailable());
+
+            \Log::info("Vendor {$what} email sent to {$to} for vendor {$vendor->id}.");
 
             return '';
         } catch (\Throwable $e) {
             \Log::error("Vendor {$what} email error for vendor {$vendor->id}: " . $e->getMessage());
 
-            return ' However, the notification email to ' . $vendor->email . ' could not be sent.';
+            return ' However, the notification email to ' . $to . ' could not be sent.';
         }
+    }
+
+    /**
+     * Where a vendor-facing email should actually go.
+     *
+     * This used to read vendors.email and nothing else, so a vendor row with that column
+     * blank had its approval mail dropped on the floor - which is exactly what the log
+     * recorded, repeatedly, while the admin screen still said "Vendor approved
+     * successfully!". The address is never really missing in that situation: the vendor
+     * signs in with users.email, so that is the address to fall back to.
+     *
+     * The blank column is also worth repairing while we are here, so the next message -
+     * and every screen that prints the vendor's contact details - has it too.
+     */
+    private function vendorMailAddress(Vendor $vendor): ?string
+    {
+        $onVendor = trim((string) $vendor->email);
+
+        if ($onVendor !== '') {
+            return $onVendor;
+        }
+
+        $onLogin = trim((string) ($vendor->user->email ?? ''));
+
+        if ($onLogin === '') {
+            return null;
+        }
+
+        try {
+            $vendor->forceFill(['email' => $onLogin])->save();
+            \Log::info("Backfilled vendors.email for vendor {$vendor->id} from its login address.");
+        } catch (\Throwable $e) {
+            \Log::warning("Could not backfill vendors.email for vendor {$vendor->id}: " . $e->getMessage());
+        }
+
+        return $onLogin;
     }
 
     /**

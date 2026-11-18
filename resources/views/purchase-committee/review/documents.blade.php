@@ -144,7 +144,7 @@
                         default    => ['fa-cloud-arrow-up text-blue-400',        'bg-blue-50 text-blue-700',       'Online'],
                     };
                 @endphp
-                <a href="{{ Storage::url($file['path']) }}" target="_blank"
+                <a href="{{ $bundle['application']->fileUrl($file['path']) }}" target="_blank"
                    class="px-6 py-3 flex items-center justify-between gap-3 hover:bg-gray-50 transition">
                     <span class="text-sm text-gray-700 truncate min-w-0">
                         <i class="fas {{ $fIcon }} mr-2"></i>

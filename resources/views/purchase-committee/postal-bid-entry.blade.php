@@ -68,7 +68,7 @@
                 @if($application->postal_quote_scan)
                 <p class="text-xs text-gray-500 mb-1">
                     <i class="fas fa-file-alt mr-1"></i>
-                    <a href="{{ Storage::url($application->postal_quote_scan) }}" target="_blank" class="text-amber-700 hover:underline">View currently uploaded scan</a>
+                    <a href="{{ $application->fileUrl($application->postal_quote_scan) }}" target="_blank" class="text-amber-700 hover:underline">View currently uploaded scan</a>
                     — uploading a new file will replace it.
                 </p>
                 @endif

@@ -497,6 +497,15 @@ Route::middleware('auth')->prefix('profile')->name('profile.')->group(function (
 
 // Postal bid manual entry — reachable by Admin/Super Admin/Tender Owner/Purchase Committee;
 // PostalBidController enforces the actual per-application authorization internally.
+/*
+ * Reading a file a vendor submitted. Open to any signed-in user because every role has a
+ * legitimate reason to reach it at some point; ApplicationDocumentController decides, per
+ * fetch, whether this particular viewer may see this particular file yet.
+ */
+Route::middleware('auth')->get('/secure-documents/applications/{application}', [
+    \App\Http\Controllers\ApplicationDocumentController::class, 'show',
+])->name('secure-documents.application');
+
 Route::middleware('auth')->prefix('purchase-committee')->name('purchase-committee.')->group(function () {
     Route::get('/postal-bid/{id}/edit', [\App\Http\Controllers\PostalBidController::class, 'edit'])->name('postal-bid.edit');
     Route::put('/postal-bid/{id}', [\App\Http\Controllers\PostalBidController::class, 'update'])->name('postal-bid.update');

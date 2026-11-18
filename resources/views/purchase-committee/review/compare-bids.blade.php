@@ -86,12 +86,12 @@
                         </td>
                         <td class="px-6 py-4 text-center space-x-2">
                             @if($tender->hasPostalBids() && $app->postal_quote_scan)
-                            <a href="{{ Storage::url($app->postal_quote_scan) }}" target="_blank" title="Postal quote scan" class="text-amber-600 hover:text-amber-800">
+                            <a href="{{ $app->fileUrl($app->postal_quote_scan) }}" target="_blank" title="Postal quote scan" class="text-amber-600 hover:text-amber-800">
                                 <i class="fas fa-file-alt"></i>
                             </a>
                             @endif
                             @if($app->technical_proposal_file)
-                            <a href="{{ Storage::url($app->technical_proposal_file) }}" target="_blank" title="Technical proposal" class="text-indigo-600 hover:text-indigo-800">
+                            <a href="{{ $app->fileUrl($app->technical_proposal_file) }}" target="_blank" title="Technical proposal" class="text-indigo-600 hover:text-indigo-800">
                                 <i class="fas fa-file-lines"></i>
                             </a>
                             @endif

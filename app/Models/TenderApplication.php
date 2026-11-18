@@ -47,6 +47,63 @@ class TenderApplication extends Model
         'submitted_at' => 'datetime',
     ];
 
+    /**
+     * Every stored file path that belongs to this application.
+     *
+     * ApplicationDocumentController checks a requested path against this list, so that route
+     * can only ever hand back a file this application actually owns - it can never be turned
+     * into a reader for arbitrary objects in the storage bucket.
+     */
+    public function ownedFilePaths(): array
+    {
+        $paths = [];
+
+        foreach ((array) ($this->documents ?? []) as $doc) {
+            if (is_string($doc) && $doc !== '') {
+                $paths[] = $doc;
+            } elseif (is_array($doc) && ! empty($doc['path']) && is_string($doc['path'])) {
+                $paths[] = $doc['path'];
+            }
+        }
+
+        foreach (['technical_proposal_file', 'financial_proposal_file', 'postal_quote_scan'] as $column) {
+            if (! empty($this->{$column})) {
+                $paths[] = $this->{$column};
+            }
+        }
+
+        foreach ($this->eligibilityAnswers as $answer) {
+            if (! empty($answer->file_path)) {
+                $paths[] = $answer->file_path;
+            }
+        }
+
+        foreach ($this->receivedDocuments as $received) {
+            if (! empty($received->file_path)) {
+                $paths[] = $received->file_path;
+            }
+        }
+
+        return array_values(array_unique($paths));
+    }
+
+    /**
+     * The URL to read one of this application's files.
+     *
+     * Always use this in a view rather than Storage::url(). Storage::url() returns a direct
+     * bucket URL that nothing can take back once it is on the page, which left sealed bids
+     * fetchable by anyone holding the link; this goes through the route that re-checks the
+     * seal and the viewer's entitlement on every fetch.
+     */
+    public function fileUrl(?string $path, bool $download = false): string
+    {
+        return route('secure-documents.application', array_filter([
+            'application' => $this->id,
+            'path'        => $path,
+            'download'    => $download ? 1 : null,
+        ], fn ($v) => $v !== null));
+    }
+
     // Boot method to generate application number
     protected static function boot()
     {
@@ -344,7 +401,7 @@ class TenderApplication extends Model
         foreach ($this->documents ?? [] as $document) {
             $urls[] = [
                 'name' => $document['name'] ?? 'Document',
-                'url' => Storage::url($document['path']),
+                'url' => $this->fileUrl($document['path']),
                 'size' => $this->formatFileSize($document['size'] ?? 0),
                 'type' => pathinfo($document['name'] ?? '', PATHINFO_EXTENSION),
             ];

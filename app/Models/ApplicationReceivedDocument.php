@@ -50,10 +50,15 @@ class ApplicationReceivedDocument extends Model
 
     public function getUrl(): string
     {
-        // Storage::url() follows whichever driver the public disk is on, so this keeps
-        // working when PUBLIC_DISK_DRIVER flips to s3. asset() would always build a
-        // local /storage URL and 404 against the bucket.
-        return Storage::url($this->file_path);
+        // Served through the application's gated document route rather than as a direct
+        // bucket URL, so entitlement is re-checked on every fetch. These are recorded only
+        // after the tender is opened, so the seal is already lifted by the time they exist -
+        // but they are still a vendor's bid papers and do not belong on a public URL.
+        $application = $this->application;
+
+        return $application
+            ? $application->fileUrl($this->file_path)
+            : Storage::url($this->file_path);
     }
 
     /**

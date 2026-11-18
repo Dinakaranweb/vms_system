@@ -43,13 +43,13 @@
                 @if($techFile)
                     {{-- Both text and file exist --}}
                     <div class="mt-3 flex flex-wrap gap-2">
-                        <a href="{{ Storage::url($techFile) }}" target="_blank"
+                        <a href="{{ $application->fileUrl($techFile) }}" target="_blank"
                            class="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-100 transition">
                             <i class="{{ appFileIcon($techFile) }}"></i>
                             View Attached File
                             <i class="fas fa-external-link-alt text-xs text-gray-400"></i>
                         </a>
-                        <a href="{{ Storage::url($techFile) }}" download
+                        <a href="{{ $application->fileUrl($techFile) }}" download
                            class="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-100 transition">
                             <i class="fas fa-download text-gray-400"></i> Download
                         </a>
@@ -65,12 +65,12 @@
                     </div>
                     <div class="flex gap-2">
                         @if(appFileViewable($techFile))
-                        <a href="{{ Storage::url($techFile) }}" target="_blank"
+                        <a href="{{ $application->fileUrl($techFile) }}" target="_blank"
                            class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition">
                             <i class="fas fa-eye"></i> View
                         </a>
                         @endif
-                        <a href="{{ Storage::url($techFile) }}" download
+                        <a href="{{ $application->fileUrl($techFile) }}" download
                            class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg transition">
                             <i class="fas fa-download"></i> Download
                         </a>
@@ -90,13 +90,13 @@
                 <p class="text-gray-700 text-sm leading-relaxed whitespace-pre-line">{{ $finText }}</p>
                 @if($finFile)
                     <div class="mt-3 flex flex-wrap gap-2">
-                        <a href="{{ Storage::url($finFile) }}" target="_blank"
+                        <a href="{{ $application->fileUrl($finFile) }}" target="_blank"
                            class="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-100 transition">
                             <i class="{{ appFileIcon($finFile) }}"></i>
                             View Attached File
                             <i class="fas fa-external-link-alt text-xs text-gray-400"></i>
                         </a>
-                        <a href="{{ Storage::url($finFile) }}" download
+                        <a href="{{ $application->fileUrl($finFile) }}" download
                            class="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-100 transition">
                             <i class="fas fa-download text-gray-400"></i> Download
                         </a>
@@ -112,12 +112,12 @@
                     </div>
                     <div class="flex gap-2">
                         @if(appFileViewable($finFile))
-                        <a href="{{ Storage::url($finFile) }}" target="_blank"
+                        <a href="{{ $application->fileUrl($finFile) }}" target="_blank"
                            class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition">
                             <i class="fas fa-eye"></i> View
                         </a>
                         @endif
-                        <a href="{{ Storage::url($finFile) }}" download
+                        <a href="{{ $application->fileUrl($finFile) }}" download
                            class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg transition">
                             <i class="fas fa-download"></i> Download
                         </a>
@@ -159,12 +159,12 @@
             </div>
             <div class="flex gap-2 flex-shrink-0 ml-3">
                 @if($canView)
-                <a href="{{ Storage::url($doc['path']) }}" target="_blank"
+                <a href="{{ $application->fileUrl($doc['path']) }}" target="_blank"
                    class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition">
                     <i class="fas fa-eye"></i> View
                 </a>
                 @endif
-                <a href="{{ Storage::url($doc['path']) }}" download="{{ $docName }}"
+                <a href="{{ $application->fileUrl($doc['path']) }}" download="{{ $docName }}"
                    class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg transition">
                     <i class="fas fa-download"></i> Download
                 </a>

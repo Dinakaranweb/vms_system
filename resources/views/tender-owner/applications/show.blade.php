@@ -60,11 +60,11 @@
             @endif
             @if($application->technical_proposal_file)
                 <div class="mt-2 flex gap-2 flex-wrap">
-                    <a href="{{ Storage::url($application->technical_proposal_file) }}" target="_blank"
+                    <a href="{{ $application->fileUrl($application->technical_proposal_file) }}" target="_blank"
                        class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition">
                         <i class="fas fa-eye"></i> View File
                     </a>
-                    <a href="{{ Storage::url($application->technical_proposal_file) }}" download
+                    <a href="{{ $application->fileUrl($application->technical_proposal_file, true) }}" download
                        class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg transition">
                         <i class="fas fa-download"></i> Download
                     </a>
@@ -80,11 +80,11 @@
             @endif
             @if($application->financial_proposal_file)
                 <div class="mt-2 flex gap-2 flex-wrap">
-                    <a href="{{ Storage::url($application->financial_proposal_file) }}" target="_blank"
+                    <a href="{{ $application->fileUrl($application->financial_proposal_file) }}" target="_blank"
                        class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition">
                         <i class="fas fa-eye"></i> View File
                     </a>
-                    <a href="{{ Storage::url($application->financial_proposal_file) }}" download
+                    <a href="{{ $application->fileUrl($application->financial_proposal_file, true) }}" download
                        class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg transition">
                         <i class="fas fa-download"></i> Download
                     </a>
@@ -136,7 +136,7 @@
                 </p>
                 <p class="text-sm text-gray-600 mt-1">
                     @if($answer->file_path)
-                        <a href="{{ Storage::url($answer->file_path) }}" target="_blank" class="text-blue-600 hover:underline">
+                        <a href="{{ $application->fileUrl($answer->file_path) }}" target="_blank" class="text-blue-600 hover:underline">
                             <i class="fas fa-file mr-1"></i>View Uploaded File
                         </a>
                     @else
@@ -168,12 +168,12 @@
                 </div>
                 <div class="flex gap-2">
                     @if(in_array($ext, ['pdf','jpg','jpeg','png','gif']))
-                    <button onclick="viewDocument('{{ Storage::url($doc['path']) }}', '{{ $doc['name'] ?? '' }}')"
+                    <button onclick="viewDocument('{{ $application->fileUrl($doc['path']) }}', '{{ $doc['name'] ?? '' }}')"
                             class="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">
                         <i class="fas fa-eye"></i>
                     </button>
                     @endif
-                    <a href="{{ Storage::url($doc['path']) }}" download="{{ $doc['name'] ?? '' }}"
+                    <a href="{{ $application->fileUrl($doc['path'], true) }}" download="{{ $doc['name'] ?? '' }}"
                        class="px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700">
                         <i class="fas fa-download"></i>
                     </a>

@@ -147,7 +147,7 @@
                     <div class="flex items-center gap-3 p-2.5 bg-gray-50 rounded-lg border border-gray-100">
                         <i class="fas fa-file-pdf text-red-400"></i>
                         <span class="text-sm text-gray-700 flex-1 truncate">{{ basename($doc) }}</span>
-                        <a href="{{ Storage::url($doc) }}" target="_blank"
+                        <a href="{{ $application->fileUrl($doc) }}" target="_blank"
                             class="text-xs text-indigo-600 hover:underline flex-shrink-0">
                             <i class="fas fa-download mr-0.5"></i> Download
                         </a>

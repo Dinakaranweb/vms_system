@@ -85,7 +85,7 @@ class TenderOwnerController extends Controller
             $q->whereIn('name', ['admin', 'tender-owner', 'committee-member']);
         })->get();
 
-        $availableRoles = Role::whereIn('name', ['admin', 'tender-owner', 'committee-member'])->get();
+        $availableRoles = Role::whereIn('name', $this->assignableSystemRoles())->get();
 
         if ($isAdmin) {
             $segment = request()->segment(1); // 'admin' or 'super-admin'
@@ -168,6 +168,34 @@ class TenderOwnerController extends Controller
     }
     
     /**
+     * System roles the current actor may hand to a user they create on this screen.
+     *
+     * This endpoint validated spatie_role as `required|string` and then passed it to
+     * Role::firstOrCreate() before assignRole(), so any caller could mint a user with ANY
+     * role - 'super-admin' and 'purchase-committee' included - and invent new roles on the
+     * way. The dropdown openly offered 'admin' to tender owners, so a tender owner could
+     * create themselves an admin account; a hand-posted value could go further still.
+     *
+     * Purchase Committee is absent at every level on purpose. Those members hold the codes
+     * that open tenders, so only a Super Admin maintains them - the same rule the user
+     * management screen enforces.
+     */
+    private function assignableSystemRoles(): array
+    {
+        $user = auth()->user();
+
+        if ($user->hasRole('super-admin')) {
+            return ['committee-member', 'tender-owner', 'admin'];
+        }
+
+        if ($user->hasRole('admin')) {
+            return ['committee-member', 'tender-owner'];
+        }
+
+        return ['committee-member'];
+    }
+
+    /**
      * Create a brand-new user and immediately add them to the tender committee.
      */
     public function createAndAddCommitteeMember(Request $request, $id)
@@ -178,11 +206,15 @@ class TenderOwnerController extends Controller
             return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
         }
 
+        $assignable = $this->assignableSystemRoles();
+
         $request->validate([
             'name'         => 'required|string|max:255',
             'email'        => 'required|email|unique:users,email',
             'password'     => 'required|string|min:8',
-            'spatie_role'  => 'required|string',
+            // Allowlisted, and it must be a role that already exists - never one this
+            // request can bring into being.
+            'spatie_role'  => 'required|string|exists:roles,name|in:' . implode(',', $assignable),
             'role'         => 'required|in:chairman,member,observer,technical_expert,financial_expert',
             'designation'  => 'nullable|string|max:255',
             'permissions'  => 'nullable|array',
@@ -190,9 +222,9 @@ class TenderOwnerController extends Controller
 
         DB::beginTransaction();
         try {
-            // Ensure committee-member role exists
+            // Validated against assignableSystemRoles() and exists:roles,name above, so
+            // there is nothing to create here - roles are never minted from request input.
             $spatieRoleName = $request->spatie_role;
-            Role::firstOrCreate(['name' => $spatieRoleName, 'guard_name' => 'web']);
 
             $user = User::create([
                 'name'      => $request->name,

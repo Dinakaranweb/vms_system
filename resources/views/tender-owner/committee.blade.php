@@ -89,9 +89,10 @@
                             <div>
                                 <label class="block text-xs font-semibold text-gray-600 mb-1">System Role (Spatie) *</label>
                                 <select name="spatie_role" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500">
-                                    <option value="committee-member">Committee Member (default)</option>
                                     @foreach($availableRoles as $role)
-                                    <option value="{{ $role->name }}">{{ ucwords(str_replace('-', ' ', $role->name)) }}</option>
+                                    <option value="{{ $role->name }}" {{ $role->name === 'committee-member' ? 'selected' : '' }}>
+                                        {{ ucwords(str_replace('-', ' ', $role->name)) }}{{ $role->name === 'committee-member' ? ' (default)' : '' }}
+                                    </option>
                                     @endforeach
                                 </select>
                                 <p class="text-xs text-gray-400 mt-1">Controls what parts of the portal this user can access.</p>

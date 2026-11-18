@@ -111,7 +111,7 @@
         {{-- Tenders to open --}}
         <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
             <div class="px-5 py-4 border-b border-gray-100 flex justify-between items-center">
-                <h3 class="font-semibold text-gray-800 flex items-center gap-2"><i class="fas fa-envelope-open-text text-green-500 text-sm"></i> Tenders To Open</h3>
+                <h3 class="font-semibold text-gray-800 flex items-center gap-2"><i class="fas fa-envelope-open-text text-green-500 text-sm"></i> Tenders Awaiting Opening</h3>
                 <a href="{{ route('purchase-committee.tenders.index') }}" class="text-xs text-indigo-600 hover:underline">View all</a>
             </div>
             <div class="divide-y divide-gray-50">
@@ -121,8 +121,12 @@
                         <p class="text-sm font-medium text-gray-900 truncate">{{ $tender->title }}</p>
                         <p class="text-xs text-gray-400 mt-0.5">{{ $tender->tender_number }} · {{ $tender->applications_count }} applications</p>
                     </div>
-                    <button onclick="openBidding({{ $tender->id }})" class="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 flex-shrink-0"
-                            title="Sends a code to every committee member's login, then opens the screen where the codes are entered">Open</button>
+                    {{-- Read-only for a committee member: the Purchase Officer starts the
+                         opening, and the member's code then arrives in their own login. --}}
+                    <span class="text-xs bg-slate-50 text-slate-600 border border-slate-200 px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 flex-shrink-0"
+                          title="The Purchase Officer starts the opening. Your code will arrive in your login when they do.">
+                        <i class="fas fa-hourglass-start"></i> Awaiting officer
+                    </span>
                 </div>
                 @empty
                 <div class="px-5 py-10 text-center text-gray-400 text-sm">No closed tenders waiting to be opened.</div>
@@ -207,21 +211,4 @@
     @include('partials.dashboard-widgets', ['widgetData' => $widgetData, 'hideEmptyState' => true])
 </div>
 
-<script>
-const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
-function openBidding(id) {
-    if (!confirm('Send an opening code to every active Purchase Committee member? Each member receives their code in their own login and reads it out to the Purchase Officer in person — the codes are then entered together on the next screen, and the tender opens once every code is in.')) return;
-    fetch(`/purchase-committee/tenders/${id}/open-bidding`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken }
-    }).then(r => r.json()).then(data => {
-        if (data.success) {
-            alert(data.message);
-            /* Straight to the screen where the codes are keyed in. */
-            window.location.href = data.redirect || window.location.href;
-        }
-        else alert(data.message || 'Failed to open bidding.');
-    });
-}
-</script>
 @endsection

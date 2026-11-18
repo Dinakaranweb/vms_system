@@ -49,8 +49,9 @@ class TenderReviewController extends Controller
 
     public function openForReview($tenderId)
     {
-        if (!$this->isCommitteeMember() && !auth()->user()->hasRole('super-admin') && !auth()->user()->hasRole('admin')) {
-            return response()->json(['success' => false, 'message' => 'You are not authorized to open this tender for review.'], 403);
+        // Same rule as an opening: the officer acts, the committee does not act on itself.
+        if (!auth()->user()->hasRole('super-admin') && !auth()->user()->hasRole('admin')) {
+            return response()->json(['success' => false, 'message' => 'Only the Purchase Officer can open this tender for review.'], 403);
         }
 
         $tender = Tender::findOrFail($tenderId);
@@ -414,22 +415,23 @@ class TenderReviewController extends Controller
     }
 
     /**
-     * Who may run an opening: the Purchase Officer / Admin / Super Admin, the tender's own
-     * owner, or a committee member acting as the officer at the table. Note this is the person
-     * keying codes in — it is never enough on its own, since every member's code is still
-     * required before anything opens.
+     * Who may run an opening: the Purchase Officer only, meaning Admin or Super Admin.
+     *
+     * Committee members are deliberately excluded. They are the source of the codes, so
+     * letting one of them also key the codes in would collapse the two-party control the
+     * opening exists to provide. Tender owners are excluded for the same reason. This is
+     * still never sufficient on its own - every member's code is required before anything
+     * opens. $tender is kept in the signature for the callers and for future per-tender
+     * rules.
      */
     private function authorizeOfficer(Tender $tender): void
     {
         $user = auth()->user();
 
-        $isOfficer = $user->hasRole('super-admin')
-            || $user->hasRole('admin')
-            || $user->hasRole('purchase-committee')
-            || ($user->hasRole('tender-owner') && $tender->owner_id === $user->id);
+        $isOfficer = $user->hasRole('super-admin') || $user->hasRole('admin');
 
         if (!$isOfficer) {
-            abort(403, 'You are not authorized to collect opening codes for this tender.');
+            abort(403, 'Only the Purchase Officer can collect opening codes for this tender.');
         }
     }
 
@@ -439,13 +441,11 @@ class TenderReviewController extends Controller
      */
     private function officerTenderRoute(Tender $tender): string
     {
-        $user = auth()->user();
-
-        if ($user->hasRole('super-admin'))        return 'super-admin.tenders.show';
-        if ($user->hasRole('admin'))              return 'admin.tenders.show';
-        if ($user->hasRole('tender-owner'))       return 'tender-owner.tenders.show';
-
-        return 'purchase-committee.review.documents';
+        // Only Admin and Super Admin reach any caller of this, since authorizeOfficer()
+        // guards every one of them.
+        return auth()->user()->hasRole('super-admin')
+            ? 'super-admin.tenders.show'
+            : 'admin.tenders.show';
     }
 
     /**

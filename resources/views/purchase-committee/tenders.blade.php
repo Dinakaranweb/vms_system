@@ -44,7 +44,12 @@
                             <p class="text-xs text-gray-400">applications</p>
                         </div>
                         @if($tender->canBeOpened())
-                        <button onclick="openBidding({{ $tender->id }})" class="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700">Open Tender</button>
+                        {{-- A committee member supplies a code; they never start the opening.
+                             This is status only, so the action belongs to the officer alone. --}}
+                        <span class="text-xs bg-slate-50 text-slate-600 border border-slate-200 px-3 py-1.5 rounded-lg inline-flex items-center gap-1"
+                              title="The Purchase Officer starts the opening. Your code will arrive in your login when they do.">
+                            <i class="fas fa-hourglass-start"></i> Awaiting the Purchase Officer
+                        </span>
                         @elseif($tender->isOpeningOtpPending())
                             @if($tender->hasVerifiedOpeningOtp(auth()->id()))
                             <span class="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-lg inline-flex items-center gap-1"><i class="fas fa-check"></i> Your code was collected</span>
@@ -53,9 +58,11 @@
                                 <i class="fas fa-key"></i> Read your code to the officer
                             </span>
                             @endif
-                            <a href="{{ route('purchase-committee.review.opening-codes', $tender->id) }}" class="text-xs text-gray-400 hover:text-indigo-600 hover:underline">
+                            {{-- The code-entry screen is the officer's and now refuses
+                                 committee members, so show the tally without a dead link. --}}
+                            <span class="text-xs text-gray-400">
                                 {{ $tender->openingOtpsVerifiedCount() }}/{{ $tender->openingOtpsIssuedCount() }} codes collected
-                            </a>
+                            </span>
                         @elseif(!$tender->isBidOpen() && $tender->isClosed() && !$tender->hasOpeningMomentArrived())
                         <span class="text-xs bg-slate-50 text-slate-600 border border-slate-200 px-3 py-1.5 rounded-lg inline-flex items-center gap-1"
                               title="{{ $tender->openingBlockedReason() }}">
@@ -82,21 +89,4 @@
     </div>
 </div>
 
-<script>
-const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
-function openBidding(id) {
-    if (!confirm('Send an opening code to every active Purchase Committee member? Each member receives their code in their own login and reads it out to the Purchase Officer in person — the codes are then entered together on the next screen, and the tender opens once every code is in.')) return;
-    fetch(`/purchase-committee/tenders/${id}/open-bidding`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken }
-    }).then(r => r.json()).then(data => {
-        if (data.success) {
-            alert(data.message);
-            /* Straight to the screen where the codes are keyed in. */
-            window.location.href = data.redirect || window.location.href;
-        }
-        else alert(data.message || 'Failed to open bidding.');
-    });
-}
-</script>
 @endsection

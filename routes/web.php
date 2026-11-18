@@ -348,7 +348,8 @@ Route::middleware(['auth', 'role:tender-owner'])->prefix('tender-owner')->name('
     Route::post('/tenders/{id}/publish', [TenderController::class, 'ownerPublish'])->name('tenders.publish');
     Route::post('/tenders/{id}/university-display', [TenderController::class, 'updateUniversityDisplay'])->name('tenders.university-display');
     Route::post('/tenders/{id}/close', [TenderController::class, 'ownerClose'])->name('tenders.close');
-    Route::post('/tenders/{id}/open-bidding', [TenderController::class, 'openBidding'])->name('tenders.open-bidding');
+    // No open-bidding here: starting an opening is the Purchase Officer's act, so it lives
+    // only under the super-admin and admin prefixes. See TenderController::openBidding().
     Route::post('/tenders/{id}/queries', [\App\Http\Controllers\TenderQueryController::class, 'store'])->name('tenders.queries.store');
     Route::post('/tenders/{id}/queries/mark-read', [\App\Http\Controllers\TenderQueryController::class, 'markRead'])->name('tenders.queries.mark-read');
     
@@ -499,7 +500,8 @@ Route::middleware('auth')->prefix('profile')->name('profile.')->group(function (
 Route::middleware('auth')->prefix('purchase-committee')->name('purchase-committee.')->group(function () {
     Route::get('/postal-bid/{id}/edit', [\App\Http\Controllers\PostalBidController::class, 'edit'])->name('postal-bid.edit');
     Route::put('/postal-bid/{id}', [\App\Http\Controllers\PostalBidController::class, 'update'])->name('postal-bid.update');
-    Route::post('/tenders/{id}/open-bidding', [TenderController::class, 'openBidding'])->name('tenders.open-bidding');
+    // No open-bidding here either: a committee member supplies a code but never starts an
+    // opening, which would put both halves of the control in one pair of hands.
 
     // Tender review gate — every active committee member's one-time code must be collected
     // before a tender opens. The codes are delivered to each member's own login, read out to

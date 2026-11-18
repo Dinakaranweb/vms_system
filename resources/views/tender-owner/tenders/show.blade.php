@@ -29,13 +29,16 @@
                     </button>
                     @endif
                     @if($tender->canBeOpened())
-                    <button onclick="openBidding({{ $tender->id }})" class="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition">
-                        <i class="fas fa-envelope-open-text mr-2"></i>Open Tender
-                    </button>
+                    {{-- Openings are the Purchase Officer's act alone, so the owner of the
+                         tender sees its state here rather than a button. --}}
+                    <span class="bg-slate-50 text-slate-600 border border-slate-200 px-4 py-2 rounded-lg text-sm inline-flex items-center"
+                          title="The Purchase Officer opens this tender using the committee's codes">
+                        <i class="fas fa-hourglass-start mr-2"></i>Awaiting opening by the Purchase Officer
+                    </span>
                     @elseif($tender->isOpeningOtpPending())
-                    <a href="{{ route('purchase-committee.review.opening-codes', $tender->id) }}" class="bg-amber-50 text-amber-700 border border-amber-200 px-4 py-2 rounded-lg text-sm inline-flex items-center hover:bg-amber-100 transition">
-                        <i class="fas fa-hourglass-half mr-2"></i>Enter Committee Codes ({{ $tender->openingOtpsVerifiedCount() }}/{{ $tender->openingOtpsIssuedCount() }})
-                    </a>
+                    <span class="bg-amber-50 text-amber-700 border border-amber-200 px-4 py-2 rounded-lg text-sm inline-flex items-center">
+                        <i class="fas fa-hourglass-half mr-2"></i>Opening in progress — {{ $tender->openingOtpsVerifiedCount() }}/{{ $tender->openingOtpsIssuedCount() }} codes collected
+                    </span>
                     @elseif(!$tender->isBidOpen() && $tender->isClosed() && !$tender->hasOpeningMomentArrived())
                     <span class="bg-slate-50 text-slate-600 border border-slate-200 px-4 py-2 rounded-lg text-sm inline-flex items-center"
                           title="{{ $tender->openingBlockedReason() }}">
@@ -348,27 +351,6 @@ function closeTender(id) {
                   location.reload();
               } else {
                   alert('Failed to close tender: ' + data.message);
-              }
-          });
-    }
-}
-
-function openBidding(id) {
-    if (confirm('Send an opening code to every active Purchase Committee member? Each member receives their code in their own login and reads it out to you in person — you then enter all of them on the next screen, and the tender opens once every code is in.')) {
-        fetch(`/tender-owner/tenders/${id}/open-bidding`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': csrfToken
-            }
-        }).then(response => response.json())
-          .then(data => {
-              if (data.success) {
-                  alert(data.message);
-                  /* Straight to the screen where the officer keys in the members' codes. */
-                  window.location.href = data.redirect || window.location.href;
-              } else {
-                  alert('Failed to open bidding: ' + data.message);
               }
           });
     }

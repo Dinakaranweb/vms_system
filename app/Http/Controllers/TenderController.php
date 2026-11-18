@@ -624,13 +624,18 @@ class TenderController extends Controller
         $tender = Tender::findOrFail($id);
         $user = auth()->user();
 
-        $isAuthorized = $user->hasRole('super-admin')
-            || $user->hasRole('admin')
-            || $user->hasRole('purchase-committee')
-            || ($user->hasRole('tender-owner') && $tender->owner_id === $user->id);
+        // Starting an opening is the Purchase Officer's act alone. A committee member
+        // supplies one code and must never be able to begin an opening or issue codes to
+        // themselves - that would put both halves of the control in one pair of hands. The
+        // tender's own owner no longer opens it either: every opening goes through the
+        // officer. None of this touches who may *view* a tender or its shared documents.
+        $isAuthorized = $user->hasRole('super-admin') || $user->hasRole('admin');
 
         if (!$isAuthorized) {
-            return response()->json(['success' => false, 'message' => 'You are not authorized to open bids for this tender.'], 403);
+            return response()->json([
+                'success' => false,
+                'message' => 'Only the Purchase Officer can open a tender. Committee members receive a code in their own login once the officer starts the opening.',
+            ], 403);
         }
 
         if (!$tender->canBeOpened()) {

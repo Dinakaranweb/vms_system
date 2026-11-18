@@ -16,29 +16,71 @@ use Spatie\Permission\Models\Permission;
 
 class UserController extends Controller
 {
+    /**
+     * The only roles an Admin - the Purchase Officer - may create, edit, deactivate or
+     * delete. Every other role, Purchase Committee above all, belongs to the Super Admin.
+     *
+     * The officer opens tenders using one-time codes that the Purchase Committee members
+     * hold. An officer who could edit those members could change a member's email to one
+     * they control, deactivate members until only their own account remained, or mint a
+     * new member outright - and then collect every code alone. That would defeat the
+     * two-party control the opening exists to provide, so the officer maintains only the
+     * two kinds of account procurement itself needs: vendors and tender owners.
+     *
+     * Committee membership (PurchaseCommitteeMember) was already Super Admin only; this
+     * closes the same door on the underlying user accounts.
+     */
+    private const ADMIN_MANAGEABLE_ROLES = ['vendor', 'tender-owner'];
+
     private function isActorSuperAdmin(): bool
     {
         return auth()->user()->hasRole('super-admin');
     }
 
-    private function denyIfSuperAdmin(User $target): bool
+    /**
+     * Role names the actor may manage, or null for no restriction at all (Super Admin).
+     */
+    private function manageableRoleNames(): ?array
     {
-        return !$this->isActorSuperAdmin() && $target->hasRole('super-admin');
+        return $this->isActorSuperAdmin() ? null : self::ADMIN_MANAGEABLE_ROLES;
+    }
+
+    /**
+     * Whether the actor may not touch this user at all.
+     *
+     * Every role the target holds must be within the allowed set, not merely one of them.
+     * Accepting a partial match would let an Admin edit a dual-role account - say a vendor
+     * who is also a committee member - and strip the privileged role through syncRoles().
+     * A user with no role at all is likewise out of bounds.
+     */
+    private function cannotManage(User $target): bool
+    {
+        $names = $this->manageableRoleNames();
+
+        if ($names === null) {
+            return false;
+        }
+
+        $targetRoles = $target->getRoleNames();
+
+        return $targetRoles->isEmpty() || $targetRoles->diff($names)->isNotEmpty();
     }
 
     private function allowedRoles(): \Illuminate\Database\Eloquent\Collection
     {
-        return $this->isActorSuperAdmin()
-            ? Role::all()
-            : Role::where('name', '!=', 'super-admin')->get();
+        $names = $this->manageableRoleNames();
+
+        return $names === null ? Role::all() : Role::whereIn('name', $names)->get();
     }
 
     private function baseQuery()
     {
         $q = User::with('roles', 'vendor');
-        if (!$this->isActorSuperAdmin()) {
-            $q->whereDoesntHave('roles', fn($r) => $r->where('name', 'super-admin'));
+
+        if (($names = $this->manageableRoleNames()) !== null) {
+            $q->whereHas('roles', fn($r) => $r->whereIn('name', $names));
         }
+
         return $q;
     }
 
@@ -53,13 +95,15 @@ class UserController extends Controller
             'total'         => $this->baseQuery()->count(),
             'active'        => $this->baseQuery()->where('is_active', true)->count(),
             'inactive'      => $this->baseQuery()->where('is_active', false)->count(),
-            'admins'        => User::role('admin')->count(),
             'vendors'       => User::role('vendor')->count(),
             'tender_owners' => User::role('tender-owner')->count(),
         ];
 
+        // Counts of accounts the actor cannot manage would only be noise on their screen,
+        // so the Super Admin / Admin tallies are Super Admin only.
         if ($this->isActorSuperAdmin()) {
             $stats['super_admins'] = User::role('super-admin')->count();
+            $stats['admins']       = User::role('admin')->count();
         }
 
         $roles = $this->allowedRoles();
@@ -83,8 +127,8 @@ class UserController extends Controller
      */
     public function store(Request $request)
     {
-        if (!$this->isActorSuperAdmin() && $request->role === 'super-admin') {
-            return back()->withErrors(['role' => 'You are not allowed to assign the Super Admin role.'])->withInput();
+        if (!$this->isActorSuperAdmin() && !in_array($request->role, self::ADMIN_MANAGEABLE_ROLES, true)) {
+            return back()->withErrors(['role' => 'You can only create or assign the Vendor and Tender Owner roles. Any other role, including Purchase Committee, must be set by a Super Admin.'])->withInput();
         }
 
         $request->validate([
@@ -124,8 +168,8 @@ class UserController extends Controller
     {
         $user = User::with('roles', 'vendor')->findOrFail($id);
 
-        if ($this->denyIfSuperAdmin($user)) {
-            abort(403, 'Access denied.');
+        if ($this->cannotManage($user)) {
+            abort(403, 'This account is managed by a Super Admin.');
         }
 
         return view('admin.users.show', compact('user'));
@@ -138,8 +182,8 @@ class UserController extends Controller
     {
         $user = User::with('roles')->findOrFail($id);
 
-        if ($this->denyIfSuperAdmin($user)) {
-            abort(403, 'Access denied.');
+        if ($this->cannotManage($user)) {
+            abort(403, 'This account is managed by a Super Admin.');
         }
 
         $roles     = $this->allowedRoles();
@@ -160,12 +204,12 @@ class UserController extends Controller
     {
         $user = User::findOrFail($id);
 
-        if ($this->denyIfSuperAdmin($user)) {
-            abort(403, 'Access denied.');
+        if ($this->cannotManage($user)) {
+            abort(403, 'This account is managed by a Super Admin.');
         }
 
-        if (!$this->isActorSuperAdmin() && $request->role === 'super-admin') {
-            return back()->withErrors(['role' => 'You are not allowed to assign the Super Admin role.'])->withInput();
+        if (!$this->isActorSuperAdmin() && !in_array($request->role, self::ADMIN_MANAGEABLE_ROLES, true)) {
+            return back()->withErrors(['role' => 'You can only create or assign the Vendor and Tender Owner roles. Any other role, including Purchase Committee, must be set by a Super Admin.'])->withInput();
         }
 
         // Block role change away from vendor if they have submitted any tender applications
@@ -225,8 +269,8 @@ class UserController extends Controller
                 return response()->json(['success' => false, 'message' => 'You cannot delete your own account.'], 400);
             }
 
-            if ($this->denyIfSuperAdmin($user)) {
-                return response()->json(['success' => false, 'message' => 'You cannot delete a Super Admin.'], 403);
+            if ($this->cannotManage($user)) {
+                return response()->json(['success' => false, 'message' => 'Only a Super Admin can delete this account.'], 403);
             }
 
             $user->delete();
@@ -250,8 +294,8 @@ class UserController extends Controller
                 return response()->json(['success' => false, 'message' => 'You cannot change your own status.'], 400);
             }
 
-            if ($this->denyIfSuperAdmin($user)) {
-                return response()->json(['success' => false, 'message' => 'You cannot change the status of a Super Admin.'], 403);
+            if ($this->cannotManage($user)) {
+                return response()->json(['success' => false, 'message' => 'Only a Super Admin can change the status of this account.'], 403);
             }
 
             $user->update(['is_active' => !$user->is_active]);
@@ -312,8 +356,10 @@ class UserController extends Controller
             $query = User::whereIn('id', $request->user_ids)
                 ->where('id', '!=', auth()->id());
 
-            if (!$this->isActorSuperAdmin()) {
-                $query->whereDoesntHave('roles', fn($r) => $r->where('name', 'super-admin'));
+            // Scoped exactly as the listing is, so a hand-posted list of ids cannot reach
+            // an account the actor may not manage.
+            if (($names = $this->manageableRoleNames()) !== null) {
+                $query->whereHas('roles', fn($r) => $r->whereIn('name', $names));
             }
 
             switch ($request->action) {

@@ -46,6 +46,7 @@
             </div>
         </div>
         @endif
+        @if(isset($stats['admins']))
         <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-orange-500">
             <div class="flex justify-between items-center">
                 <div>
@@ -53,6 +54,16 @@
                     <p class="text-2xl font-bold text-gray-800">{{ $stats['admins'] }}</p>
                 </div>
                 <i class="fas fa-user-shield text-3xl text-orange-500"></i>
+            </div>
+        </div>
+        @endif
+        <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-indigo-500">
+            <div class="flex justify-between items-center">
+                <div>
+                    <p class="text-gray-500 text-sm">Tender Owners</p>
+                    <p class="text-2xl font-bold text-gray-800">{{ $stats['tender_owners'] }}</p>
+                </div>
+                <i class="fas fa-user-tie text-3xl text-indigo-500"></i>
             </div>
         </div>
         <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-teal-500">
@@ -65,6 +76,20 @@
             </div>
         </div>
     </div>
+
+    @unless(auth()->user()->hasRole('super-admin'))
+    {{-- Without this the narrowed list reads as missing data rather than as a boundary. --}}
+    <div class="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 flex items-start gap-3 text-sm">
+        <i class="fas fa-circle-info text-blue-500 mt-0.5"></i>
+        <p class="text-blue-800">
+            You manage <span class="font-semibold">Vendor</span> and
+            <span class="font-semibold">Tender Owner</span> accounts.
+            Purchase Committee, Admin and other accounts are maintained by a Super Admin, so
+            that the officer who opens a tender is never the person who maintains the
+            committee whose codes open it.
+        </p>
+    </div>
+    @endunless
 
     <!-- Actions Bar -->
     <div class="bg-white rounded-xl shadow-sm p-4">

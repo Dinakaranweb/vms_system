@@ -370,15 +370,22 @@ class Tender extends Model
     }
 
     /**
-     * Bid opening can only happen manually, only after the tender has actually closed
-     * (deadline passed or status already 'closed'), and only once the scheduled opening
-     * moment has arrived - never before, regardless of who clicks it.
+     * Whether the Purchase Officer may start an opening.
+     *
+     * The opening date is a published schedule, not a lock. Procurement regularly has to
+     * open on or before the advertised moment - every bidder has withdrawn, the committee is
+     * only in the room today, a correction has to be issued - and a system that refuses
+     * leaves the officer with no lawful way through. So the only two states that genuinely
+     * have nothing to open are a tender already opened and a draft that was never published.
+     *
+     * This widens *who may start the process*, and nothing else. Opening still issues a code
+     * to every active committee member, and what the vendors submitted stays sealed until the
+     * last of those codes is keyed in - see areSubmissionsSealed() and isBidOpen(). An early
+     * click cannot reveal a single document on its own.
      */
     public function canBeOpened(): bool
     {
-        return !$this->isBidOpen()
-            && $this->isClosed()
-            && $this->hasOpeningMomentArrived();
+        return !$this->isBidOpen() && !$this->isDraft();
     }
 
     /**
@@ -391,16 +398,34 @@ class Tender extends Model
             return 'Bids for this tender have already been opened.';
         }
 
-        if (!$this->isClosed()) {
-            return 'This tender must be closed before bids can be opened.';
-        }
-
-        if (!$this->hasOpeningMomentArrived()) {
-            return 'This tender cannot be opened before its scheduled opening on '
-                . $this->openingMoment()->format('d M Y, h:i A') . '.';
+        if ($this->isDraft()) {
+            return 'A draft tender has no submissions to open. Publish it first.';
         }
 
         return null;
+    }
+
+    /**
+     * True when opening now would run ahead of the advertised opening moment.
+     *
+     * Permitted, but the officer is told before they commit, and the record shows it.
+     */
+    public function isOpeningAheadOfSchedule(): bool
+    {
+        return !$this->isBidOpen() && !$this->hasOpeningMomentArrived();
+    }
+
+    /**
+     * True when starting an opening would also have to stop new submissions.
+     *
+     * Opening a tender that is still taking bids would let staff read what is already in
+     * while more arrives behind it, so the two happen together - see
+     * TenderController::openBidding(). Nothing can be submitted after the committee has seen
+     * the field, which is the whole point of a sealed bid.
+     */
+    public function willCloseSubmissionsOnOpening(): bool
+    {
+        return !$this->isBidOpen() && !$this->isDraft() && !$this->isClosed();
     }
 
     /**
@@ -408,8 +433,10 @@ class Tender extends Model
      *
      * Everything a vendor sent in - the bid amount and the uploaded documents alike - stays
      * unreadable to staff until the Purchase Committee has opened the tender by entering all
-     * of their codes, which canBeOpened() will not permit before the scheduled opening
-     * moment. Vendors always see their own submission; this governs the staff-facing screens.
+     * of their codes. The officer may *start* that process at any time, including ahead of
+     * the advertised opening moment, but starting it reveals nothing on its own: this stays
+     * true until the last code lands. Vendors always see their own submission; this governs
+     * the staff-facing screens.
      */
     public function areSubmissionsSealed(): bool
     {

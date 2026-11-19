@@ -650,8 +650,26 @@
                     <i class="fas fa-lock"></i>
                   </button>
                 @endif
-                @if($tender->canBeOpened())
-                  <button onclick="openBidding({{ $tender->id }})" class="tm-action-btn" style="color:#059669;" title="Open Tender (sends a code to each Purchase Committee member's login)">
+                @if($tender->canBeOpened() && !$tender->isOpeningOtpPending())
+                  {{-- The advertised opening date is a schedule, not a lock: procurement has
+                       to be able to open on or before it. The officer is told in the tooltip
+                       and again in the confirm box when this runs early or closes bidding. --}}
+                  @php
+                    /* Built here, not inline: Blade does not treat "@if" as a directive when a
+                       word character runs straight into it, so an inline one inside an
+                       attribute silently stays literal while its @endif compiles. */
+                    $oaMoment = $tender->openingMoment();
+                    $oaEarly  = $tender->isOpeningAheadOfSchedule() && $oaMoment;
+                    $oaClose  = $tender->willCloseSubmissionsOnOpening();
+                    $oaTitle  = "Open Tender — sends a code to each Purchase Committee member's login"
+                        . ($oaClose ? ', and closes submissions, which are still open' : '')
+                        . ($oaEarly ? '. This is ahead of the advertised opening on ' . $oaMoment->format('d M Y, h:i A') : '')
+                        . '.';
+                  @endphp
+                  <button onclick="openBidding({{ $tender->id }}, {{ $oaClose ? 'true' : 'false' }}, {{ $oaEarly ? json_encode($oaMoment->format('d M Y, h:i A')) : 'null' }})"
+                          class="tm-action-btn"
+                          style="color:{{ $oaEarly || $oaClose ? '#d97706' : '#059669' }};"
+                          title="{{ $oaTitle }}">
                     <i class="fas fa-envelope-open-text"></i>
                   </button>
                 @elseif($tender->isOpeningOtpPending())
@@ -659,11 +677,6 @@
                      title="Collect committee codes — {{ $tender->openingOtpsVerifiedCount() }} of {{ $tender->openingOtpsIssuedCount() }} entered">
                     <i class="fas fa-hourglass-half"></i>
                   </a>
-                @elseif(!$tender->isBidOpen() && $tender->isClosed() && !$tender->hasOpeningMomentArrived())
-                  <span class="tm-action-btn" style="color:#94a3b8;cursor:not-allowed;"
-                        title="{{ $tender->openingBlockedReason() }}">
-                    <i class="fas fa-hourglass-start"></i>
-                  </span>
                 @elseif($tender->isBidOpen())
                   <span class="tm-action-btn" style="color:#059669;cursor:default;" title="Bids opened {{ $tender->bid_opening_at->format('d M Y, h:i A') }}">
                     <i class="fas fa-envelope-open"></i>
@@ -678,11 +691,11 @@
                      title="Finalize the award — record the chosen applicant and the committee discussion">
                     <i class="fas fa-gavel"></i>
                   </a>
-                @elseif($tender->isPublished())
-                  {{-- Still accepting bids. Without this the Open button simply was not
-                       there and nothing said why, which reads as a bug rather than a rule. --}}
+                @elseif($tender->isDraft())
+                  {{-- Nothing to open: never published, so nothing was ever submitted.
+                       Say so rather than leaving a gap that reads as a bug. --}}
                   <span class="tm-action-btn" style="color:#94a3b8;cursor:help;"
-                        title="{{ $tender->openingBlockedReason() }} Use Close Tender first, then Open Tender.">
+                        title="{{ $tender->openingBlockedReason() }}">
                     <i class="fas fa-circle-info"></i>
                   </span>
                 @endif
@@ -1024,8 +1037,16 @@ function closeTender(id) {
   });
 }
 
-function openBidding(id) {
-  if (!confirm('Send an opening code to every active Purchase Committee member? Each member receives their code in their own login and reads it out to you in person — you then enter all of them on the next screen, and the tender opens once every code is in.')) return;
+function openBidding(id, willCloseSubmissions, scheduledOpening) {
+  let msg = 'Send an opening code to every active Purchase Committee member? Each member receives their code in their own login and reads it out to you in person \u2014 you then enter all of them on the next screen, and the tender opens once every code is in.';
+  /* Opening early is allowed, but never by accident: say so before anything is sent. */
+  if (scheduledOpening) {
+    msg = 'This tender is advertised to open on ' + scheduledOpening + '. You are starting the opening before that.\n\n' + msg;
+  }
+  if (willCloseSubmissions) {
+    msg += '\n\nThis tender is still accepting bids. Starting the opening will also close submissions, so nothing further can be submitted once the committee has seen the field.';
+  }
+  if (!confirm(msg)) return;
   fetch(`/${rolePrefix}/tenders/${id}/open-bidding`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken }

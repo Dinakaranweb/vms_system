@@ -43,7 +43,7 @@
                             <p class="text-2xl font-bold text-indigo-700">{{ $tender->applications_count }}</p>
                             <p class="text-xs text-gray-400">applications</p>
                         </div>
-                        @if($tender->canBeOpened())
+                        @if($tender->canBeOpened() && !$tender->isOpeningOtpPending() && $tender->isClosed() && $tender->hasOpeningMomentArrived())
                         {{-- A committee member supplies a code; they never start the opening.
                              This is status only, so the action belongs to the officer alone. --}}
                         <span class="text-xs bg-slate-50 text-slate-600 border border-slate-200 px-3 py-1.5 rounded-lg inline-flex items-center gap-1"
@@ -63,10 +63,12 @@
                             <span class="text-xs text-gray-400">
                                 {{ $tender->openingOtpsVerifiedCount() }}/{{ $tender->openingOtpsIssuedCount() }} codes collected
                             </span>
-                        @elseif(!$tender->isBidOpen() && $tender->isClosed() && !$tender->hasOpeningMomentArrived())
+                        @elseif(!$tender->isBidOpen() && !$tender->isOpeningOtpPending() && $tender->isClosed())
+                        {{-- A date still to come is the advertised schedule, not a lock: the
+                             officer may start the opening on or before it. --}}
                         <span class="text-xs bg-slate-50 text-slate-600 border border-slate-200 px-3 py-1.5 rounded-lg inline-flex items-center gap-1"
-                              title="{{ $tender->openingBlockedReason() }}">
-                            <i class="fas fa-hourglass-start"></i> Opens {{ $tender->openingMoment()->format('d M, h:i A') }}
+                              title="Advertised opening. The Purchase Officer may start the opening on or before this, and your code arrives in your login when they do.">
+                            <i class="fas fa-hourglass-start"></i> Scheduled {{ $tender->openingMoment()->format('d M, h:i A') }}
                         </span>
                         @elseif($tender->isBidOpen() && $tender->isReviewUnlockedFor(auth()->id()))
                         @php $tFinal = \App\Models\AwardFinalization::activeFor($tender->id); @endphp

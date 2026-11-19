@@ -650,10 +650,29 @@ class TenderController extends Controller
             return response()->json(['success' => false, 'message' => 'No active Purchase Committee members are configured. Add at least one before a tender can be opened.'], 400);
         }
 
+        // Read both before anything changes - closing the tender below would flip the second.
+        $aheadOfSchedule = $tender->isOpeningAheadOfSchedule();
+        $scheduledFor    = $tender->openingMoment();
+        $closesNow       = $tender->willCloseSubmissionsOnOpening();
+
         $issued = 0;
 
-        DB::transaction(function () use ($tender, $user, $members, &$issued) {
+        DB::transaction(function () use ($tender, $user, $members, $closesNow, &$issued) {
             $tender->update(['bid_opened_by' => $user->id]);
+
+            // An officer may open on or before the advertised date, but never while bids are
+            // still arriving: staff would be reading the field with more of it still to come.
+            // Closing here is what keeps the bid sealed rather than merely hidden, and it
+            // spares the officer the old two-step of Close Tender, then Open Tender.
+            if ($closesNow) {
+                $tender->update([
+                    'status'        => 'closed',
+                    'closed_reason' => trim((string) $tender->closed_reason) !== ''
+                        ? $tender->closed_reason
+                        : 'Closed automatically when ' . $user->name . ' started the opening on '
+                            . now()->format('d M Y, h:i A') . '.',
+                ]);
+            }
 
             foreach ($members as $member) {
                 $reviewOtp = TenderReviewOtp::firstOrCreate(
@@ -671,10 +690,21 @@ class TenderController extends Controller
             }
         });
 
+        $message = $issued . ' of ' . $members->count() . ' Purchase Committee member(s) have been sent an opening code in their login. Collect each code from them in person and enter them together on the opening screen.';
+
+        if ($closesNow) {
+            $message = 'This tender was still accepting bids, so submissions have now been closed. ' . $message;
+        }
+
+        if ($aheadOfSchedule && $scheduledFor) {
+            $message = 'Opening started ahead of the advertised opening on '
+                . $scheduledFor->format('d M Y, h:i A') . '. ' . $message;
+        }
+
         return response()->json([
             'success'  => true,
             'redirect' => route('purchase-committee.review.opening-codes', $tender->id),
-            'message'  => $issued . ' of ' . $members->count() . ' Purchase Committee member(s) have been sent an opening code in their login. Collect each code from them in person and enter them together on the opening screen.',
+            'message'  => $message,
         ]);
     }
 

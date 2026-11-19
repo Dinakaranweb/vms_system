@@ -28,7 +28,7 @@
                         <i class="fas fa-lock mr-2"></i>Close Tender
                     </button>
                     @endif
-                    @if($tender->canBeOpened())
+                    @if($tender->canBeOpened() && !$tender->isOpeningOtpPending() && $tender->isClosed() && $tender->hasOpeningMomentArrived())
                     {{-- Openings are the Purchase Officer's act alone, so the owner of the
                          tender sees its state here rather than a button. --}}
                     <span class="bg-slate-50 text-slate-600 border border-slate-200 px-4 py-2 rounded-lg text-sm inline-flex items-center"
@@ -39,15 +39,18 @@
                     <span class="bg-amber-50 text-amber-700 border border-amber-200 px-4 py-2 rounded-lg text-sm inline-flex items-center">
                         <i class="fas fa-hourglass-half mr-2"></i>Opening in progress — {{ $tender->openingOtpsVerifiedCount() }}/{{ $tender->openingOtpsIssuedCount() }} codes collected
                     </span>
-                    @elseif(!$tender->isBidOpen() && $tender->isClosed() && !$tender->hasOpeningMomentArrived())
+                    @elseif(!$tender->isBidOpen() && !$tender->isOpeningOtpPending() && $tender->isClosed())
+                    {{-- A date still to come is the advertised schedule, not a lock. --}}
                     <span class="bg-slate-50 text-slate-600 border border-slate-200 px-4 py-2 rounded-lg text-sm inline-flex items-center"
-                          title="{{ $tender->openingBlockedReason() }}">
-                        <i class="fas fa-hourglass-start mr-2"></i>Opens {{ $tender->openingMoment()->format('d M Y, h:i A') }}
+                          title="Advertised opening. The Purchase Officer may start the opening on or before this.">
+                        <i class="fas fa-hourglass-start mr-2"></i>Scheduled {{ $tender->openingMoment()->format('d M Y, h:i A') }}
                     </span>
                     @elseif($tender->isPublished() && !$tender->isBidOpen())
+                    {{-- Still taking bids. openingBlockedReason() is null here now, so state
+                         the position plainly instead of rendering an empty chip. --}}
                     <span class="bg-slate-50 text-slate-600 border border-slate-200 px-4 py-2 rounded-lg text-sm inline-flex items-center"
-                          title="{{ $tender->openingBlockedReason() }}">
-                        <i class="fas fa-circle-info mr-2"></i>{{ $tender->openingBlockedReason() }}
+                          title="The Purchase Officer may start the opening at any time; doing so also closes submissions.">
+                        <i class="fas fa-circle-info mr-2"></i>Accepting bids until {{ $tender->submission_deadline->format('d M Y') }}
                     </span>
                     @elseif($tender->isBidOpen())
                     <span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-2 rounded-lg text-sm inline-flex items-center">

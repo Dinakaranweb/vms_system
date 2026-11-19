@@ -3,8 +3,9 @@
 
     Shown on the staff-facing screens in place of whatever a vendor submitted, for as long as
     the tender is still sealed. Nothing a vendor sent in may be read before the Purchase
-    Committee has opened the tender by entering every member's code, and Tender::canBeOpened()
-    will not allow that before the tender's scheduled opening moment.
+    Committee has opened the tender by entering every member's code. The Purchase Officer may
+    start that opening at any time, including ahead of the advertised opening moment, but
+    starting it reveals nothing on its own - the seal lifts only when the last code is in.
 
     This deliberately renders no file URL at all rather than hiding a link with CSS, so the
     documents cannot simply be read out of the page source before opening.

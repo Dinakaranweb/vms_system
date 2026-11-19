@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use App\Mail\VendorApprovedMail;
 use App\Mail\VendorRejectedMail;
+use App\Services\VendorApprovalChain;
 
 class VendorManagementController extends Controller
 {
@@ -59,26 +60,9 @@ class VendorManagementController extends Controller
      */
     private function vendorMailAddress(Vendor $vendor): ?string
     {
-        $onVendor = trim((string) $vendor->email);
-
-        if ($onVendor !== '') {
-            return $onVendor;
-        }
-
-        $onLogin = trim((string) ($vendor->user->email ?? ''));
-
-        if ($onLogin === '') {
-            return null;
-        }
-
-        try {
-            $vendor->forceFill(['email' => $onLogin])->save();
-            \Log::info("Backfilled vendors.email for vendor {$vendor->id} from its login address.");
-        } catch (\Throwable $e) {
-            \Log::warning("Could not backfill vendors.email for vendor {$vendor->id}: " . $e->getMessage());
-        }
-
-        return $onLogin;
+        // The rule itself lives on the model, because the committee's approval chain sends
+        // vendor-facing mail too and the two must resolve the address identically.
+        return $vendor->resolveMailAddress();
     }
 
     /**
@@ -137,11 +121,14 @@ class VendorManagementController extends Controller
 
     $totalVendors = Vendor::count();
     $pendingVendors = Vendor::where('status', 'pending')->count();
+    // Cleared by the officer and now with the committee. Counted separately so these do not
+    // silently vanish from the tiles between the officer's approval and the final one.
+    $committeeVendors = Vendor::where('status', 'committee_review')->count();
     $approvedVendors = Vendor::where('status', 'approved')->count();
     $rejectedVendors = Vendor::where('status', 'rejected')->count();
     $categories = Category::where('is_active', true)->orderBy('name')->get(['id', 'name', 'color', 'icon']);
 
-    return view('admin.vendors.index', compact('vendors', 'totalVendors', 'pendingVendors', 'approvedVendors', 'rejectedVendors', 'categories'));
+    return view('admin.vendors.index', compact('vendors', 'totalVendors', 'pendingVendors', 'committeeVendors', 'approvedVendors', 'rejectedVendors', 'categories'));
 }
     /**
      * Get vendors data for DataTable.
@@ -243,27 +230,44 @@ class VendorManagementController extends Controller
     /**
      * Approve vendor.
      */
+    /**
+     * The Purchase Officer clears a registration — which starts the committee's approval
+     * order rather than finishing the job.
+     *
+     * The vendor is not approved here and is deliberately not emailed here: that happens once
+     * the final member of the Purchase Committee has approved. The one exception is a system
+     * with no committee configured, where there is nobody to pass it to and the officer's
+     * approval stands alone; VendorApprovalChain::start() handles that and says so.
+     */
     public function approve($id)
     {
+        // Resolved here rather than injected into the signature so the method stays callable
+        // with just an id, the way the rest of this controller is.
+        $chain = app(VendorApprovalChain::class);
+
         try {
             $vendor = Vendor::findOrFail($id);
-            
-            $vendor->update([
-                'status' => 'approved',
-                'approved_by' => auth()->id(),
-                'approved_at' => now(),
-            ]);
-            
-            if ($vendor->user) {
-                $vendor->user->update(['is_active' => true]);
+
+            if ($vendor->isApproved()) {
+                return response()->json(['success' => false, 'message' => 'This vendor is already approved.']);
             }
 
-            $notice = $this->notifyVendorByMail($vendor, fn () => new VendorApprovedMail($vendor), 'approval');
+            if ($vendor->isAwaitingCommittee()) {
+                $waiting = $vendor->currentApprovalStep()?->committeeMember->name;
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This vendor is already with the Purchase Committee'
+                        . ($waiting ? ", waiting on {$waiting}." : '.'),
+                ]);
+            }
+
+            $result = $chain->start($vendor, auth()->user());
 
             return response()->json([
-                'success'    => true,
-                'message'    => 'Vendor approved successfully!' . $notice,
-                'email_sent' => $notice === '',
+                'success'  => true,
+                'message'  => $result['message'],
+                'approved' => $result['approved'],
             ]);
         } catch (\Exception $e) {
             return response()->json([

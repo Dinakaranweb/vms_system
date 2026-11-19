@@ -6,7 +6,7 @@
 @section('content')
 <div class="space-y-6">
     <!-- Stats Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+    <div class="grid grid-cols-1 md:grid-cols-5 gap-6">
         <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-500">
             <div class="flex justify-between items-center">
                 <div>
@@ -23,6 +23,15 @@
                     <p class="text-2xl font-bold text-gray-800">{{ $pendingVendors ?? 0 }}</p>
                 </div>
                 <i class="fas fa-clock text-3xl text-yellow-500"></i>
+            </div>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-indigo-500">
+            <div class="flex justify-between items-center">
+                <div>
+                    <p class="text-gray-500 text-sm">With Committee</p>
+                    <p class="text-2xl font-bold text-gray-800">{{ $committeeVendors ?? 0 }}</p>
+                </div>
+                <i class="fas fa-users text-3xl text-indigo-500"></i>
             </div>
         </div>
         <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-green-500">
@@ -81,6 +90,15 @@
                             @if($vendor->status == 'pending')
                                 <span class="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs">
                                     <i class="fas fa-clock mr-1"></i>Pending
+                                </span>
+                            @elseif($vendor->status == 'committee_review')
+                                {{-- Cleared by the officer, now working through the Purchase
+                                     Committee's order. Naming who it sits with saves the
+                                     officer opening the vendor to find out. --}}
+                                @php $vcStep = $vendor->currentApprovalStep(); $vcProg = $vendor->approvalProgress(); @endphp
+                                <span class="px-2 py-1 bg-indigo-100 text-indigo-800 rounded-full text-xs"
+                                      title="{{ $vcStep?->committeeMember->name ? 'Waiting on ' . $vcStep->committeeMember->name : 'With the Purchase Committee' }}">
+                                    <i class="fas fa-users mr-1"></i>Committee {{ $vcProg['decided'] }}/{{ $vcProg['total'] }}
                                 </span>
                             @elseif($vendor->status == 'approved')
                                 <span class="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">
@@ -198,23 +216,30 @@
 <!-- ==================== APPROVE VENDOR MODAL ==================== -->
 <div id="approveModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50" style="display: none;">
     <div class="bg-white rounded-xl shadow-xl w-full max-w-md m-4">
-        <div class="bg-gradient-to-r from-green-600 to-green-500 px-6 py-4">
+        <div class="bg-gradient-to-r from-indigo-600 to-indigo-500 px-6 py-4">
             <h3 class="text-xl font-bold text-white">
-                <i class="fas fa-check-circle mr-2"></i>Approve Vendor
+                <i class="fas fa-users mr-2"></i>Send to Purchase Committee
             </h3>
         </div>
         <div class="p-6">
             <div class="text-center mb-4">
-                <i class="fas fa-building text-6xl text-green-500 mb-3"></i>
-                <p class="text-gray-600">Are you sure you want to approve this vendor?</p>
+                <i class="fas fa-building text-6xl text-indigo-500 mb-3"></i>
+                <p class="text-gray-600">Clear this registration and send it to the Purchase Committee?</p>
                 <p class="font-semibold text-gray-800 mt-2" id="approveVendorName"></p>
+            </div>
+            {{-- The officer's approval no longer finishes the job, and saying so here stops
+                 them expecting the vendor to go active straight away. --}}
+            <div class="rounded-lg bg-indigo-50 border border-indigo-100 px-4 py-3 text-sm text-indigo-800">
+                <i class="fas fa-circle-info mr-1.5"></i>
+                The committee approves in the order set by the Super Admin, one member at a time.
+                The vendor is activated and emailed only once the final approver has signed off.
             </div>
             <div class="flex justify-end space-x-3 mt-6">
                 <button onclick="window.closeApproveModal()" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition">
                     Cancel
                 </button>
-                <button onclick="window.confirmApprove()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
-                    <i class="fas fa-check mr-2"></i>Approve
+                <button onclick="window.confirmApprove()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
+                    <i class="fas fa-paper-plane mr-2"></i>Send to Committee
                 </button>
             </div>
         </div>
@@ -593,10 +618,12 @@ window.confirmApprove = function() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            showToast(data.message || 'Vendor approved successfully!', data.email_sent === false ? 'error' : 'success');
-            setTimeout(() => location.reload(), 1500);
+            // The officer's approval normally only starts the committee's order, so the
+            // message comes from the server rather than being assumed here.
+            showToast(data.message || 'Sent to the Purchase Committee.', 'success');
+            setTimeout(() => location.reload(), 2500);
         } else {
-            showToast('Failed to approve vendor', 'error');
+            showToast(data.message || 'Failed to approve vendor', 'error');
         }
     })
     .catch(error => {
@@ -700,6 +727,7 @@ window.confirmDelete = function() {
 function getStatusBadge(status) {
     const badges = {
         'pending': '<span class="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs"><i class="fas fa-clock mr-1"></i>Pending</span>',
+        'committee_review': '<span class="px-2 py-1 bg-indigo-100 text-indigo-800 rounded-full text-xs"><i class="fas fa-users mr-1"></i>With Committee</span>',
         'approved': '<span class="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs"><i class="fas fa-check-circle mr-1"></i>Approved</span>',
         'rejected': '<span class="px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs"><i class="fas fa-times-circle mr-1"></i>Rejected</span>'
     };

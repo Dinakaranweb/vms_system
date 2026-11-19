@@ -475,6 +475,14 @@ Route::middleware(['auth', 'role:purchase-committee'])->prefix('purchase-committ
     Route::get('/notifications', [\App\Http\Controllers\PurchaseCommitteePortalController::class, 'notifications'])->name('notifications');
     Route::post('/notifications/{id}/read', [\App\Http\Controllers\PurchaseCommitteePortalController::class, 'markNotificationRead'])->name('notifications.read');
     Route::post('/notifications/read-all', [\App\Http\Controllers\PurchaseCommitteePortalController::class, 'markAllNotificationsRead'])->name('notifications.read-all');
+
+    // Vendor registrations the Purchase Officer has cleared, put to each member in the order
+    // the Super Admin set. Whose turn it is is enforced in VendorApprovalChain, not by the
+    // routing, so reaching these directly cannot jump the queue.
+    Route::get('/vendor-approvals', [\App\Http\Controllers\VendorApprovalController::class, 'index'])->name('vendor-approvals.index');
+    Route::get('/vendor-approvals/{vendor}', [\App\Http\Controllers\VendorApprovalController::class, 'show'])->name('vendor-approvals.show');
+    Route::post('/vendor-approvals/{vendor}/approve', [\App\Http\Controllers\VendorApprovalController::class, 'approve'])->name('vendor-approvals.approve');
+    Route::post('/vendor-approvals/{vendor}/reject', [\App\Http\Controllers\VendorApprovalController::class, 'reject'])->name('vendor-approvals.reject');
 });
 
 // ==================== GENERIC PORTAL (permission-gated, auto-available to any new role) ====================

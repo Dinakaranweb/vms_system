@@ -58,7 +58,16 @@ class AuthController extends Controller
             
             if ($user->vendor->status !== 'approved') {
                 Auth::logout();
-                return back()->withErrors(['email' => 'Your account is pending admin approval.']);
+
+                // Approval now has two stages, and "pending admin approval" read as though
+                // nothing had happened to a vendor the officer had already cleared.
+                $message = match ($user->vendor->status) {
+                    'committee_review' => 'Your registration has been cleared and is with the Purchase Committee for final approval. We will email you as soon as it is approved.',
+                    'rejected'         => 'Your registration was not approved. Please check the email we sent you for the reason.',
+                    default            => 'Your account is pending admin approval.',
+                };
+
+                return back()->withErrors(['email' => $message]);
             }
         }
         

@@ -691,13 +691,6 @@
                      title="Finalize the award — record the chosen applicant and the committee discussion">
                     <i class="fas fa-gavel"></i>
                   </a>
-                @elseif($tender->isDraft())
-                  {{-- Nothing to open: never published, so nothing was ever submitted.
-                       Say so rather than leaving a gap that reads as a bug. --}}
-                  <span class="tm-action-btn" style="color:#94a3b8;cursor:help;"
-                        title="{{ $tender->openingBlockedReason() }}">
-                    <i class="fas fa-circle-info"></i>
-                  </span>
                 @endif
                 <button onclick="deleteTender({{ $tender->id }})" class="tm-action-btn delete" title="Delete">
                   <i class="fas fa-trash"></i>

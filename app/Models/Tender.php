@@ -373,10 +373,14 @@ class Tender extends Model
      * Whether the Purchase Officer may start an opening.
      *
      * The opening date is a published schedule, not a lock. Procurement regularly has to
-     * open on or before the advertised moment - every bidder has withdrawn, the committee is
-     * only in the room today, a correction has to be issued - and a system that refuses
-     * leaves the officer with no lawful way through. So the only two states that genuinely
-     * have nothing to open are a tender already opened and a draft that was never published.
+     * open on or before the advertised moment - every bidder has withdrawn, only one
+     * application came in, the committee is only in the room today, a correction has to be
+     * issued - and a system that refuses leaves the officer with no lawful way through. So
+     * the officer may open from the moment a tender exists, whatever its status, whatever its
+     * opening date, and however few applications have arrived. There is no minimum: one
+     * application is enough.
+     *
+     * The single remaining bar is a tender already opened, which cannot be opened twice.
      *
      * This widens *who may start the process*, and nothing else. Opening still issues a code
      * to every active committee member, and what the vendors submitted stays sealed until the
@@ -385,7 +389,7 @@ class Tender extends Model
      */
     public function canBeOpened(): bool
     {
-        return !$this->isBidOpen() && !$this->isDraft();
+        return !$this->isBidOpen();
     }
 
     /**
@@ -396,10 +400,6 @@ class Tender extends Model
     {
         if ($this->isBidOpen()) {
             return 'Bids for this tender have already been opened.';
-        }
-
-        if ($this->isDraft()) {
-            return 'A draft tender has no submissions to open. Publish it first.';
         }
 
         return null;
@@ -425,7 +425,7 @@ class Tender extends Model
      */
     public function willCloseSubmissionsOnOpening(): bool
     {
-        return !$this->isBidOpen() && !$this->isDraft() && !$this->isClosed();
+        return !$this->isBidOpen() && !$this->isClosed();
     }
 
     /**

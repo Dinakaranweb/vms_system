@@ -127,7 +127,9 @@ class AuthController extends Controller
 
     public function register(Request $request)
     {
-        $hasGst = $request->boolean('has_gst');
+        // GST is no longer optional: every vendor states a number and files the certificate
+        // for it. Other certificates stay optional, since they are no longer standing in for
+        // a missing GST registration.
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users',
@@ -139,16 +141,15 @@ class AuthController extends Controller
             'state' => 'required|string',
             'pincode' => 'required|string|max:10',
             'pan_number' => 'required|string|unique:vendors',
-            'gst_number' => $hasGst ? 'required|string|unique:vendors' : 'nullable|string',
-            'gst_document' => $hasGst ? 'required|file|mimes:pdf,jpg,jpeg,png|max:5120' : 'nullable|file',
+            'gst_number' => 'required|string|max:20|unique:vendors',
+            'gst_document' => 'required|file|mimes:pdf,jpg,jpeg,png|max:5120',
             'pan_document' => 'required|file|mimes:pdf,jpg,jpeg,png|max:5120',
             'certificates.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
+        ], [
+            'gst_number.required'   => 'Please enter your GST number.',
+            'gst_number.unique'     => 'That GST number is already registered with us.',
+            'gst_document.required' => 'Please attach your GST certificate.',
         ]);
-
-        // Require at least one certificate if no GST
-        if (!$hasGst && !$request->hasFile('certificates')) {
-            return back()->withErrors(['certificates' => 'Please upload at least one supporting certificate (MSME, Udyam Aadhaar, or equivalent).'])->withInput();
-        }
 
         DB::beginTransaction();
 
@@ -159,7 +160,7 @@ class AuthController extends Controller
                 $documents['pan_document'] = $request->file('pan_document')->store('vendor-documents', 'public');
             }
 
-            if ($hasGst && $request->hasFile('gst_document')) {
+            if ($request->hasFile('gst_document')) {
                 $gstFile = $request->file('gst_document');
                 $documents['gst_document'] = [
                     'path' => $gstFile->store('vendor-documents', 'public'),
@@ -191,8 +192,10 @@ class AuthController extends Controller
                 'state' => $validated['state'],
                 'pincode' => $validated['pincode'],
                 'pan_number' => $validated['pan_number'],
-                'gst_number' => $hasGst ? ($validated['gst_number'] ?? null) : null,
-                'has_gst' => $hasGst,
+                'gst_number' => $validated['gst_number'],
+                // Kept true for the screens and reports that still read this column; every
+                // vendor registered from here on has a GST number by rule.
+                'has_gst' => true,
                 'status' => 'pending',
                 'registration_documents' => $documents,
             ]);

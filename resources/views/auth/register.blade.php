@@ -213,56 +213,16 @@
                                 @error('pan_number')<p class="ap-error">{{ $message }}</p>@enderror
                             </div>
 
-                            {{-- GST / supporting certificates --}}
-                            <div class="ap-box p-4 sm:p-5 md:col-span-2">
-                                <label class="flex cursor-pointer items-center gap-3">
-                                    <input type="checkbox" name="has_gst" id="hasGstCheck" value="1" class="ap-check"
-                                           onchange="toggleGst(this.checked)" {{ old('has_gst') ? 'checked' : '' }}>
-                                    <span class="text-sm font-semibold text-slate-700">I have a GST Number</span>
-                                </label>
-
-                                <div id="gstNumberBox" class="mt-4 hidden space-y-4">
-                                    <div>
-                                        <label for="gstNumberInput" class="ap-label">GST number<span class="ap-req">*</span></label>
-                                        <div class="ap-field">
-                                            <span class="ap-icon"><i class="fa-solid fa-receipt"></i></span>
-                                            <input type="text" name="gst_number" id="gstNumberInput" value="{{ old('gst_number') }}"
-                                                   placeholder="e.g. 29ABCDE1234F1Z5" class="ap-input @error('gst_number') is-invalid @enderror">
-                                        </div>
-                                        @error('gst_number')<p class="ap-error">{{ $message }}</p>@enderror
-                                    </div>
-                                    <div>
-                                        <label for="gstDocInput" class="ap-label">GST certificate / document<span class="ap-req">*</span></label>
-                                        <input type="file" name="gst_document" id="gstDocInput" accept=".pdf,.jpg,.jpeg,.png" class="ap-file">
-                                        @error('gst_document')
-                                            <p class="ap-error">{{ $message }}</p>
-                                        @else
-                                            <p class="ap-hint">Max size: 5MB. Allowed: PDF, JPG, PNG</p>
-                                        @enderror
-                                    </div>
+                            <div>
+                                <label for="gst_number" class="ap-label">GST number<span class="ap-req">*</span></label>
+                                <div class="ap-field">
+                                    <span class="ap-icon"><i class="fa-solid fa-receipt"></i></span>
+                                    <input id="gst_number" type="text" name="gst_number" value="{{ old('gst_number') }}" required
+                                           placeholder="e.g. 29ABCDE1234F1Z5" class="ap-input @error('gst_number') is-invalid @enderror">
                                 </div>
-
-                                <div id="certificateBox" class="mt-4">
-                                    <p class="ap-note mb-3">
-                                        <i class="fa-solid fa-circle-info mt-0.5"></i>
-                                        No GST? Please upload at least one supporting certificate (MSME, Udyam Aadhaar, etc.)
-                                    </p>
-                                    <div id="certList" class="space-y-3">
-                                        <div class="cert-entry flex flex-col gap-2 sm:flex-row sm:items-center">
-                                            <select name="certificate_labels[0]" class="ap-select sm:w-56 sm:flex-none">
-                                                @foreach($certOptions as $opt)
-                                                    <option value="{{ $opt }}">{{ $opt }}</option>
-                                                @endforeach
-                                            </select>
-                                            <input type="file" name="certificates[0]" accept=".pdf,.jpg,.jpeg,.png" class="ap-file flex-1">
-                                        </div>
-                                    </div>
-                                    @error('certificates')<p class="ap-error">{{ $message }}</p>@enderror
-                                    <button type="button" onclick="addCertRow()" class="ap-link mt-3 inline-flex items-center gap-1.5 text-sm">
-                                        <i class="fa-solid fa-plus text-xs"></i> Add another certificate
-                                    </button>
-                                </div>
+                                @error('gst_number')<p class="ap-error">{{ $message }}</p>@enderror
                             </div>
+
                         </div>
                     </section>
 
@@ -298,17 +258,52 @@
                         </div>
                     </section>
 
-                    {{-- 4. Supporting documents --}}
+                    {{-- 4. Supporting documents. The two proofs of identity a vendor must file
+                         sit together: the PAN document and the certificate for the GST number
+                         given above. Anything else they hold is optional. --}}
                     <section class="space-y-5">
                         <h3 class="ap-section"><span class="ap-section-num">4</span> Supporting documents</h3>
-                        <div>
-                            <label for="pan_document" class="ap-label">PAN document (PDF/Image)<span class="ap-req">*</span></label>
-                            <input id="pan_document" type="file" name="pan_document" accept=".pdf,.jpg,.jpeg,.png" required class="ap-file">
-                            @error('pan_document')
-                                <p class="ap-error">{{ $message }}</p>
-                            @else
-                                <p class="ap-hint">Max size: 5MB. Allowed: PDF, JPG, PNG</p>
-                            @enderror
+
+                        <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
+                            <div>
+                                <label for="pan_document" class="ap-label">PAN document (PDF/Image)<span class="ap-req">*</span></label>
+                                <input id="pan_document" type="file" name="pan_document" accept=".pdf,.jpg,.jpeg,.png" required class="ap-file">
+                                @error('pan_document')
+                                    <p class="ap-error">{{ $message }}</p>
+                                @else
+                                    <p class="ap-hint">Max size: 5MB. Allowed: PDF, JPG, PNG</p>
+                                @enderror
+                            </div>
+                            <div>
+                                <label for="gstDocInput" class="ap-label">GST certificate (PDF/Image)<span class="ap-req">*</span></label>
+                                <input id="gstDocInput" type="file" name="gst_document" accept=".pdf,.jpg,.jpeg,.png" required class="ap-file">
+                                @error('gst_document')
+                                    <p class="ap-error">{{ $message }}</p>
+                                @else
+                                    <p class="ap-hint">Max size: 5MB. Allowed: PDF, JPG, PNG</p>
+                                @enderror
+                            </div>
+                        </div>
+
+                        <div id="certificateBox" class="ap-box p-4 sm:p-5">
+                            <p class="ap-note mb-3">
+                                <i class="fa-solid fa-circle-info mt-0.5"></i>
+                                Optional: add any other certificates you hold (MSME, Udyam Aadhaar, etc.)
+                            </p>
+                            <div id="certList" class="space-y-3">
+                                <div class="cert-entry flex flex-col gap-2 sm:flex-row sm:items-center">
+                                    <select name="certificate_labels[0]" class="ap-select sm:w-56 sm:flex-none">
+                                        @foreach($certOptions as $opt)
+                                            <option value="{{ $opt }}">{{ $opt }}</option>
+                                        @endforeach
+                                    </select>
+                                    <input type="file" name="certificates[0]" accept=".pdf,.jpg,.jpeg,.png" class="ap-file flex-1">
+                                </div>
+                            </div>
+                            @error('certificates')<p class="ap-error">{{ $message }}</p>@enderror
+                            <button type="button" onclick="addCertRow()" class="ap-link mt-3 inline-flex items-center gap-1.5 text-sm">
+                                <i class="fa-solid fa-plus text-xs"></i> Add another certificate
+                            </button>
                         </div>
                     </section>
 
@@ -350,14 +345,6 @@
 let certCount = 1;
 const certOptions = ['MSME Certificate', 'Udyam Aadhaar', 'Trade License', 'Registration Certificate', 'Other'];
 
-function toggleGst(hasGst) {
-    document.getElementById('gstNumberBox').classList.toggle('hidden', !hasGst);
-    document.getElementById('certificateBox').classList.toggle('hidden', hasGst);
-    // Toggle required on GST fields
-    document.getElementById('gstNumberInput').required = hasGst;
-    document.getElementById('gstDocInput').required = hasGst;
-}
-
 function addCertRow() {
     const list = document.getElementById('certList');
     const div = document.createElement('div');
@@ -372,8 +359,5 @@ function addCertRow() {
     list.appendChild(div);
     certCount++;
 }
-
-// Restore GST state after a failed submission
-toggleGst(document.getElementById('hasGstCheck').checked);
 </script>
 @endsection

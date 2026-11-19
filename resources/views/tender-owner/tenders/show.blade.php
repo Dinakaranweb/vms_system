@@ -28,29 +28,35 @@
                         <i class="fas fa-lock mr-2"></i>Close Tender
                     </button>
                     @endif
-                    @if($tender->canBeOpened() && !$tender->isOpeningOtpPending() && $tender->isClosed() && $tender->hasOpeningMomentArrived())
-                    {{-- Openings are the Purchase Officer's act alone, so the owner of the
-                         tender sees its state here rather than a button. --}}
+                    @if($tender->isOpeningOtpPending())
+                    {{-- Mid-opening. The owner who started it collects the codes, so this is
+                         a link to that screen rather than a read-only chip. --}}
+                    <a href="{{ route('purchase-committee.review.opening-codes', $tender->id) }}"
+                       class="bg-amber-500 text-white px-4 py-2 rounded-lg hover:bg-amber-600 transition text-sm inline-flex items-center">
+                        <i class="fas fa-key mr-2"></i>Collect codes — {{ $tender->openingOtpsVerifiedCount() }}/{{ $tender->openingOtpsIssuedCount() }} in
+                    </a>
+                    @elseif($tender->canBeOpened() && $tender->mayBeOpenedBy(auth()->user()))
+                    {{-- The owner raised this tender, so the owner opens it; the Purchase
+                         Officer holds one of the codes instead. The advertised opening date
+                         is a published schedule, not a lock, so the button is always here. --}}
+                    @php
+                        $toMoment = $tender->openingMoment();
+                        $toEarly  = $tender->isOpeningAheadOfSchedule() && $toMoment;
+                        $toClose  = $tender->willCloseSubmissionsOnOpening();
+                        $toTitle  = 'Open Tender — sends a code to the Purchase Officer and each Purchase Committee member'
+                            . ($toClose ? ', and closes submissions, which are still open' : '')
+                            . ($toEarly ? '. This is ahead of the advertised opening on ' . $toMoment->format('d M Y, h:i A') : '') . '.';
+                    @endphp
+                    <button onclick="openBidding({{ $tender->id }}, {{ $toClose ? 'true' : 'false' }}, {{ $toEarly ? json_encode($toMoment->format('d M Y, h:i A')) : 'null' }})"
+                            class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition"
+                            title="{{ $toTitle }}">
+                        <i class="fas fa-envelope-open-text mr-2"></i>Open Tender
+                    </button>
+                    @elseif($tender->canBeOpened())
+                    {{-- Somebody else's tender, or one the officer raised. --}}
                     <span class="bg-slate-50 text-slate-600 border border-slate-200 px-4 py-2 rounded-lg text-sm inline-flex items-center"
-                          title="The Purchase Officer opens this tender using the committee's codes">
-                        <i class="fas fa-hourglass-start mr-2"></i>Awaiting opening by the Purchase Officer
-                    </span>
-                    @elseif($tender->isOpeningOtpPending())
-                    <span class="bg-amber-50 text-amber-700 border border-amber-200 px-4 py-2 rounded-lg text-sm inline-flex items-center">
-                        <i class="fas fa-hourglass-half mr-2"></i>Opening in progress — {{ $tender->openingOtpsVerifiedCount() }}/{{ $tender->openingOtpsIssuedCount() }} codes collected
-                    </span>
-                    @elseif(!$tender->isBidOpen() && !$tender->isOpeningOtpPending() && $tender->isClosed())
-                    {{-- A date still to come is the advertised schedule, not a lock. --}}
-                    <span class="bg-slate-50 text-slate-600 border border-slate-200 px-4 py-2 rounded-lg text-sm inline-flex items-center"
-                          title="Advertised opening. The Purchase Officer may start the opening on or before this.">
-                        <i class="fas fa-hourglass-start mr-2"></i>Scheduled {{ $tender->openingMoment()->format('d M Y, h:i A') }}
-                    </span>
-                    @elseif($tender->isPublished() && !$tender->isBidOpen())
-                    {{-- Still taking bids. openingBlockedReason() is null here now, so state
-                         the position plainly instead of rendering an empty chip. --}}
-                    <span class="bg-slate-50 text-slate-600 border border-slate-200 px-4 py-2 rounded-lg text-sm inline-flex items-center"
-                          title="The Purchase Officer may start the opening at any time; doing so also closes submissions.">
-                        <i class="fas fa-circle-info mr-2"></i>Accepting bids until {{ $tender->submission_deadline->format('d M Y') }}
+                          title="Opened by {{ $tender->openingStarterDescription() }}">
+                        <i class="fas fa-hourglass-start mr-2"></i>Awaiting opening by {{ $tender->openingStarterDescription() }}
                     </span>
                     @elseif($tender->isBidOpen())
                     <span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-2 rounded-lg text-sm inline-flex items-center">
@@ -323,6 +329,32 @@
 
 <script>
 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}';
+
+/* The owner of a tender opens it; the Purchase Officer and the Purchase Committee hold the
+   codes. Both warnings below describe irreversible side effects, so they are shown before
+   anything is sent rather than reported afterwards. */
+function openBidding(id, willCloseSubmissions, scheduledOpening) {
+    let msg = 'Send an opening code to the Purchase Officer and every active Purchase Committee member? Each of them receives their code in their own login and reads it out to you in person — you then enter all of them on the next screen, and the tender opens once every code is in.';
+    if (scheduledOpening) {
+        msg = 'This tender is advertised to open on ' + scheduledOpening + '. You are starting the opening before that.\n\n' + msg;
+    }
+    if (willCloseSubmissions) {
+        msg += '\n\nThis tender is still accepting bids. Starting the opening will also close submissions, so nothing further can be submitted once the committee has seen the field.';
+    }
+    if (!confirm(msg)) return;
+
+    fetch(`/tender-owner/tenders/${id}/open-bidding`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken }
+    }).then(r => r.json()).then(data => {
+        if (data.success) {
+            alert(data.message);
+            window.location.href = data.redirect || window.location.href;
+        } else {
+            alert(data.message || 'Failed to open the tender.');
+        }
+    });
+}
 
 function publishTender(id) {
     if (confirm('Are you sure you want to publish this tender?')) {

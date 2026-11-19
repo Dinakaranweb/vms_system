@@ -348,8 +348,12 @@ Route::middleware(['auth', 'role:tender-owner'])->prefix('tender-owner')->name('
     Route::post('/tenders/{id}/publish', [TenderController::class, 'ownerPublish'])->name('tenders.publish');
     Route::post('/tenders/{id}/university-display', [TenderController::class, 'updateUniversityDisplay'])->name('tenders.university-display');
     Route::post('/tenders/{id}/close', [TenderController::class, 'ownerClose'])->name('tenders.close');
-    // No open-bidding here: starting an opening is the Purchase Officer's act, so it lives
-    // only under the super-admin and admin prefixes. See TenderController::openBidding().
+
+    // An owner opens the tenders they raised themselves, and the Purchase Officer holds one
+    // of the codes for those. Entitlement is Tender::mayBeOpenedBy(), checked inside
+    // openBidding(), so this route does not widen who can open what: an owner reaching it
+    // for somebody else's tender is still refused.
+    Route::post('/tenders/{id}/open-bidding', [TenderController::class, 'openBidding'])->name('tenders.open-bidding');
     Route::post('/tenders/{id}/queries', [\App\Http\Controllers\TenderQueryController::class, 'store'])->name('tenders.queries.store');
     Route::post('/tenders/{id}/queries/mark-read', [\App\Http\Controllers\TenderQueryController::class, 'markRead'])->name('tenders.queries.mark-read');
     
@@ -479,6 +483,13 @@ Route::middleware(['auth', 'role:purchase-committee'])->prefix('purchase-committ
     // Vendor registrations the Purchase Officer has cleared, put to each member in the order
     // the Super Admin set. Whose turn it is is enforced in VendorApprovalChain, not by the
     // routing, so reaching these directly cannot jump the queue.
+    // Requests to put an extra member on one tender's committee, decided by the main
+    // Purchase Committee in the Super Admin's order. Same enforcement note as above.
+    Route::get('/committee-requests', [\App\Http\Controllers\TenderCommitteeRequestController::class, 'index'])->name('committee-requests.index');
+    Route::get('/committee-requests/{seat}', [\App\Http\Controllers\TenderCommitteeRequestController::class, 'show'])->name('committee-requests.show');
+    Route::post('/committee-requests/{seat}/approve', [\App\Http\Controllers\TenderCommitteeRequestController::class, 'approve'])->name('committee-requests.approve');
+    Route::post('/committee-requests/{seat}/reject', [\App\Http\Controllers\TenderCommitteeRequestController::class, 'reject'])->name('committee-requests.reject');
+
     Route::get('/vendor-approvals', [\App\Http\Controllers\VendorApprovalController::class, 'index'])->name('vendor-approvals.index');
     Route::get('/vendor-approvals/{vendor}', [\App\Http\Controllers\VendorApprovalController::class, 'show'])->name('vendor-approvals.show');
     Route::post('/vendor-approvals/{vendor}/approve', [\App\Http\Controllers\VendorApprovalController::class, 'approve'])->name('vendor-approvals.approve');

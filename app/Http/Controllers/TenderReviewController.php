@@ -9,6 +9,7 @@ use App\Models\PurchaseCommitteeMember;
 use App\Models\Tender;
 use App\Models\TenderApplication;
 use App\Models\TenderReviewOtp;
+use App\Models\User;
 use App\Models\Vendor;
 use App\Notifications\TenderDocumentsSharedNotification;
 use App\Notifications\TenderOpeningOtpNotification;
@@ -428,24 +429,36 @@ class TenderReviewController extends Controller
     {
         $user = auth()->user();
 
-        $isOfficer = $user->hasRole('super-admin') || $user->hasRole('admin');
-
-        if (!$isOfficer) {
-            abort(403, 'Only the Purchase Officer can collect opening codes for this tender.');
+        // Whoever is entitled to start this tender's opening is the person who collects its
+        // codes — the Purchase Officer for a tender the officer raised, the Tender Owner for
+        // one they raised themselves. Deferring to the tender keeps the two screens in step:
+        // an owner who may open must also be able to finish opening.
+        if (!$tender->mayBeOpenedBy($user)) {
+            abort(403, 'Only ' . $tender->openingStarterDescription()
+                . ' can collect opening codes for this tender.');
         }
     }
 
     /**
-     * Where to send the officer once the opening screen is done with — their own role's tender
-     * page, so an Admin is not bounced into the committee portal or vice versa.
+     * Where to send whoever ran the opening once the screen is done with — their own role's
+     * tender page, so nobody is bounced into a portal they cannot use.
+     *
+     * A Tender Owner reaches these screens now that they open the tenders they raise, and
+     * sending them to admin.tenders.show would 403 them on the way out.
      */
     private function officerTenderRoute(Tender $tender): string
     {
-        // Only Admin and Super Admin reach any caller of this, since authorizeOfficer()
-        // guards every one of them.
-        return auth()->user()->hasRole('super-admin')
-            ? 'super-admin.tenders.show'
-            : 'admin.tenders.show';
+        $user = auth()->user();
+
+        if ($user->hasRole('super-admin')) {
+            return 'super-admin.tenders.show';
+        }
+
+        if ($user->hasRole('admin')) {
+            return 'admin.tenders.show';
+        }
+
+        return 'tender-owner.tenders.show';
     }
 
     /**
@@ -453,6 +466,28 @@ class TenderReviewController extends Controller
      * and inbox. Deliberately never returned to the caller: the officer is meant to learn the
      * code only from the member, in person.
      */
+    /**
+     * Issue a code to one person on a tender whose opening is already under way.
+     *
+     * Used when an add-on committee member is approved mid-opening: the opening does not
+     * restart, but an approved add-on holds a code like anybody else, so it cannot complete
+     * without theirs either. Public because the committee approval chain is what grants the
+     * seat and therefore what has to trigger this.
+     */
+    public function issueOpeningOtpFor(Tender $tender, User $user, string $holderRole = 'add-on'): void
+    {
+        $reviewOtp = TenderReviewOtp::firstOrCreate(
+            ['tender_id' => $tender->id, 'committee_member_id' => $user->id],
+            ['holder_role' => $holderRole]
+        );
+
+        if ($reviewOtp->isVerified()) {
+            return;
+        }
+
+        $this->issueOpeningOtp($reviewOtp, $tender->bidOpenedBy->name ?? null);
+    }
+
     private function issueOpeningOtp(TenderReviewOtp $reviewOtp, ?string $officerName = null): void
     {
         $code = (string) random_int(100000, 999999);
@@ -512,15 +547,19 @@ class TenderReviewController extends Controller
     private function shareDocumentsWithCommittee(Tender $tender): void
     {
         $applicationCount = TenderApplication::where('tender_id', $tender->id)->count();
-        $members = PurchaseCommitteeMember::active()->with('user')->get();
 
-        foreach ($members as $member) {
-            if (!$member->user) continue;
+        // Everyone who supplied a code for this opening, which is the standing Purchase
+        // Committee plus any add-on members approved onto this tender and, on an
+        // owner-created tender, the Purchase Officer. Reading it from the codes rather than
+        // from the committee table means the people told about the documents are exactly the
+        // people whose codes unlocked them.
+        $recipientIds = $tender->reviewOtps()->pluck('committee_member_id')->filter()->unique();
 
+        foreach (User::whereIn('id', $recipientIds)->get() as $recipient) {
             try {
-                $member->user->notify(new TenderDocumentsSharedNotification($tender, $applicationCount));
+                $recipient->notify(new TenderDocumentsSharedNotification($tender, $applicationCount));
             } catch (\Exception $e) {
-                \Log::error('TenderDocumentsSharedNotification failed for user ' . $member->user_id . ': ' . $e->getMessage());
+                \Log::error('TenderDocumentsSharedNotification failed for user ' . $recipient->id . ': ' . $e->getMessage());
             }
         }
     }

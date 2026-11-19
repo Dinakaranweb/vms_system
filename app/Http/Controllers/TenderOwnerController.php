@@ -110,31 +110,28 @@ class TenderOwnerController extends Controller
             'permissions' => 'nullable|array',
         ]);
         
-        DB::beginTransaction();
-        
+        // Putting somebody on a tender's committee is no longer immediate. The request goes
+        // to the main Purchase Committee in the Super Admin's approval order, and the seat
+        // carries nothing — no documents, no opening code, not even an email to the person
+        // concerned — until the last main member has approved it. The chain owns all of
+        // that, including the assignment email, which is why none of it happens here.
         try {
-            $tender->committeeMembers()->attach($request->user_id, [
-                'role' => $request->role,
-                'designation' => $request->designation,
-                'permissions' => json_encode($request->permissions ?? []),
-                'added_by' => auth()->id(),
-                'is_active' => true,
-            ]);
+            $member = User::findOrFail($request->user_id);
 
-            DB::commit();
-
-            // Email the member
-            try {
-                $member = User::findOrFail($request->user_id);
-                Mail::to($member->email)->send(new CommitteeAssignedMail($member, $tender, $request->role, $request->designation));
-            } catch (\Exception $e) {
-                \Log::error('Committee assignment email failed: ' . $e->getMessage());
-            }
+            $result = app(\App\Services\TenderCommitteeApprovalChain::class)->request(
+                $tender,
+                $member,
+                auth()->user(),
+                $request->role,
+                $request->designation,
+                $request->permissions ?? []
+            );
 
             return response()->json([
-                'success' => true,
-                'message' => 'Committee member added successfully! A notification email has been sent.'
-            ]);
+                'success'  => $result['ok'],
+                'approved' => $result['approved'],
+                'message'  => $result['message'],
+            ], $result['ok'] ? 200 : 422);
         } catch (\Exception $e) {
             DB::rollback();
             return response()->json([
@@ -234,28 +231,26 @@ class TenderOwnerController extends Controller
             ]);
             $user->assignRole($spatieRoleName);
 
-            $tender->committeeMembers()->attach($user->id, [
-                'role'        => $request->role,
-                'designation' => $request->designation,
-                'permissions' => json_encode($request->permissions ?? []),
-                'added_by'    => auth()->id(),
-                'is_active'   => true,
-            ]);
-
+            // The login is created here and now - it has to be, since the seat is requested
+            // against a real user. The seat itself goes to the main Purchase Committee for
+            // approval like any other, so creating the account is not a way around that.
             DB::commit();
 
-            // Email the new user
-            try {
-                Mail::to($user->email)->send(new CommitteeAssignedMail($user, $tender, $request->role, $request->designation));
-            } catch (\Exception $e) {
-                \Log::error('Committee assignment email failed: ' . $e->getMessage());
-            }
+            $result = app(\App\Services\TenderCommitteeApprovalChain::class)->request(
+                $tender,
+                $user,
+                auth()->user(),
+                $request->role,
+                $request->designation,
+                $request->permissions ?? []
+            );
 
             return response()->json([
-                'success' => true,
-                'message' => "User '{$user->name}' created and added to committee! A notification email has been sent.",
-                'user'    => ['id' => $user->id, 'name' => $user->name, 'email' => $user->email],
-            ]);
+                'success'  => $result['ok'],
+                'approved' => $result['approved'],
+                'message'  => "Login created for '{$user->name}'. " . $result['message'],
+                'user'     => ['id' => $user->id, 'name' => $user->name, 'email' => $user->email],
+            ], $result['ok'] ? 200 : 422);
         } catch (\Exception $e) {
             DB::rollback();
             return response()->json([

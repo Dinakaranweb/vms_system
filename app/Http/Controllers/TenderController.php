@@ -624,17 +624,17 @@ class TenderController extends Controller
         $tender = Tender::findOrFail($id);
         $user = auth()->user();
 
-        // Starting an opening is the Purchase Officer's act alone. A committee member
-        // supplies one code and must never be able to begin an opening or issue codes to
-        // themselves - that would put both halves of the control in one pair of hands. The
-        // tender's own owner no longer opens it either: every opening goes through the
-        // officer. None of this touches who may *view* a tender or its shared documents.
-        $isAuthorized = $user->hasRole('super-admin') || $user->hasRole('admin');
-
-        if (!$isAuthorized) {
+        // Whoever raised the tender opens it, and whoever did not raise it holds one of the
+        // codes - so the two halves of the control are never in one pair of hands. A tender
+        // the Purchase Officer raised is opened by the officer; a tender a Tender Owner
+        // raised is opened by that owner, and the officer holds a code instead. A committee
+        // member supplies a code and never starts an opening. None of this touches who may
+        // *view* a tender or its shared documents.
+        if (!$tender->mayBeOpenedBy($user)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Only the Purchase Officer can open a tender. Committee members receive a code in their own login once the officer starts the opening.',
+                'message' => 'Only ' . $tender->openingStarterDescription()
+                    . ' can open this tender. Everyone else involved receives a code in their own login once the opening starts.',
             ], 403);
         }
 
@@ -645,9 +645,12 @@ class TenderController extends Controller
             ], 400);
         }
 
-        $members = PurchaseCommitteeMember::active()->ordered()->get();
-        if ($members->isEmpty()) {
-            return response()->json(['success' => false, 'message' => 'No active Purchase Committee members are configured. Add at least one before a tender can be opened.'], 400);
+        // Main committee, plus the Purchase Officer on an owner-created tender, plus any
+        // add-on members already approved onto this tender. Keyed user_id => holder_role.
+        $holders = $tender->openingCodeHolders();
+
+        if ($holders->isEmpty()) {
+            return response()->json(['success' => false, 'message' => 'Nobody is configured to hold an opening code for this tender. Add at least one active Purchase Committee member before it can be opened.'], 400);
         }
 
         // Read both before anything changes - closing the tender below would flip the second.
@@ -657,7 +660,7 @@ class TenderController extends Controller
 
         $issued = 0;
 
-        DB::transaction(function () use ($tender, $user, $members, $closesNow, &$issued) {
+        DB::transaction(function () use ($tender, $user, $holders, $closesNow, &$issued) {
             $tender->update(['bid_opened_by' => $user->id]);
 
             // An officer may open on or before the advertised date, but never while bids are
@@ -674,13 +677,20 @@ class TenderController extends Controller
                 ]);
             }
 
-            foreach ($members as $member) {
+            foreach ($holders as $holderId => $holderRole) {
                 $reviewOtp = TenderReviewOtp::firstOrCreate(
-                    ['tender_id' => $tender->id, 'committee_member_id' => $member->user_id]
+                    ['tender_id' => $tender->id, 'committee_member_id' => $holderId],
+                    ['holder_role' => $holderRole]
                 );
 
-                // Leave members the officer has already keyed in alone — re-issuing would throw
-                // away a code that was already read out and accepted.
+                // Keep holder_role current for a row carried over from an earlier opening,
+                // where the same person may have held their code for a different reason.
+                if ($reviewOtp->holder_role !== $holderRole) {
+                    $reviewOtp->update(['holder_role' => $holderRole]);
+                }
+
+                // Leave holders already keyed in alone — re-issuing would throw away a code
+                // that was read out and accepted.
                 if ($reviewOtp->isVerified()) {
                     continue;
                 }
@@ -690,7 +700,13 @@ class TenderController extends Controller
             }
         });
 
-        $message = $issued . ' of ' . $members->count() . ' Purchase Committee member(s) have been sent an opening code in their login. Collect each code from them in person and enter them together on the opening screen.';
+        $officerHolds = $holders->contains('officer');
+
+        $message = $issued . ' of ' . $holders->count() . ' code holder(s) have been sent an opening code in their login. Collect each code from them in person and enter them together on the opening screen.';
+
+        if ($officerHolds) {
+            $message = 'You raised this tender, so you open it and the Purchase Officer holds a code. ' . $message;
+        }
 
         if ($closesNow) {
             $message = 'This tender was still accepting bids, so submissions have now been closed. ' . $message;

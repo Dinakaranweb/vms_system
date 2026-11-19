@@ -60,9 +60,19 @@
             <div class="divide-y divide-gray-50">
                 @foreach($otps as $otp)
                 @php
-                    $member    = $otp->committeeMember;
-                    $isActive  = $members->has($otp->committee_member_id);
-                    $desig     = $members->get($otp->committee_member_id)?->designation;
+                    $member = $otp->committeeMember;
+                    $desig  = $members->get($otp->committee_member_id)?->designation;
+
+                    // A code holder is here for one of three reasons, and the row should say
+                    // which. Only a *main* member missing from the active committee is stale:
+                    // the Purchase Officer and add-on members were never in that list.
+                    $holderRole = $otp->holder_role ?: 'main';
+                    $isStale    = $holderRole === 'main' && !$members->has($otp->committee_member_id);
+                    $roleLabel  = match ($holderRole) {
+                        'officer' => 'Purchase Officer',
+                        'add-on'  => 'Added for this tender',
+                        default   => $desig ?: 'Purchase Committee',
+                    };
                 @endphp
                 <div class="px-6 py-4 flex items-center gap-4 {{ $otp->isVerified() ? 'bg-emerald-50/40' : '' }}">
                     <div class="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-semibold
@@ -77,12 +87,17 @@
                     <div class="min-w-0 flex-1">
                         <p class="text-sm font-medium text-gray-900 truncate">
                             {{ $member->name ?? 'Unknown member' }}
-                            @unless($isActive)
+                            @if($holderRole === 'officer')
+                            <span class="ml-1 text-[0.65rem] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded">officer</span>
+                            @elseif($holderRole === 'add-on')
+                            <span class="ml-1 text-[0.65rem] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">add-on</span>
+                            @endif
+                            @if($isStale)
                             <span class="ml-1 text-[0.65rem] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">no longer active</span>
-                            @endunless
+                            @endif
                         </p>
                         <p class="text-xs text-gray-400 truncate">
-                            {{ $desig ?: 'Purchase Committee' }}
+                            {{ $roleLabel }}
                             @if($otp->isVerified())
                                 · Collected {{ $otp->otp_verified_at->format('d M, h:i A') }}@if($otp->collectedBy) by {{ $otp->collectedBy->name }}@endif
                             @elseif($otp->isExpired())

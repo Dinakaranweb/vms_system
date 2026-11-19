@@ -742,6 +742,25 @@
                     <span>Award Recommendations</span>
                 </a>
 
+                {{-- Requests to add an extra member to one tender's committee. Same badge
+                     rule as below: only what is actually waiting on this member. --}}
+                <a href="{{ route('purchase-committee.committee-requests.index') }}"
+                   class="nav-link {{ request()->routeIs('purchase-committee.committee-requests.*') ? 'active' : '' }}">
+                    <i class="fas fa-user-plus"></i>
+                    <span>Committee Requests</span>
+                    @php
+                        $pcSeatPending = \App\Models\TenderCommitteeApproval::with('request')
+                            ->where('committee_member_id', Auth::id())
+                            ->where('status', 'pending')
+                            ->get()
+                            ->filter(fn ($s) => $s->isCurrentStep())
+                            ->count();
+                    @endphp
+                    @if($pcSeatPending > 0)
+                    <span style="margin-left:auto;background:#f59e0b;color:#fff;font-size:10px;font-weight:700;border-radius:100px;padding:1px 6px;">{{ $pcSeatPending > 9 ? '9+' : $pcSeatPending }}</span>
+                    @endif
+                </a>
+
                 {{-- Vendor registrations put to this member in the Super Admin's order. The
                      badge counts only what is actually waiting on them, not everything on the
                      chain, so it does not nag about other members' turns. --}}

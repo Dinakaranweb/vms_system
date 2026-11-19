@@ -7,7 +7,9 @@ use Illuminate\Database\Eloquent\Model;
 class TenderReviewOtp extends Model
 {
     protected $fillable = [
-        'tender_id', 'committee_member_id', 'otp_code', 'otp_expires_at',
+        // holder_role is 'main', 'officer' or 'add-on' — why this person holds a code, so the
+        // opening screen can say who each one is rather than listing bare names.
+        'tender_id', 'committee_member_id', 'holder_role', 'otp_code', 'otp_expires_at',
         'otp_sent_at', 'otp_verified_at', 'otp_collected_by',
     ];
 

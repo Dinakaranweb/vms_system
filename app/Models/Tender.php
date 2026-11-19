@@ -159,11 +159,30 @@ class Tender extends Model
         return $this->belongsToMany(Category::class, 'category_tender')->withTimestamps();
     }
 
+    /**
+     * The people actually on this tender's committee.
+     *
+     * Scoped to approved seats. An add-on member is requested, not simply added: until the
+     * main Purchase Committee has approved the request the person has no entitlement here,
+     * and must not be counted as a member, shown as one, sent documents or issued an opening
+     * code. Filtering at the relation means every existing caller gets that for free rather
+     * than each having to remember it.
+     *
+     * Use committeeSeats() to see pending and rejected requests as well.
+     */
     public function committeeMembers()
     {
         return $this->belongsToMany(User::class, 'tender_committee', 'tender_id', 'user_id')
-                    ->withPivot('role', 'designation', 'permissions', 'is_active', 'added_by')
+                    ->withPivot('role', 'designation', 'permissions', 'is_active', 'added_by', 'status')
+                    ->wherePivot('status', 'approved')
+                    ->wherePivot('is_active', true)
                     ->withTimestamps();
+    }
+
+    /** Every seat ever requested on this tender, whatever its state. */
+    public function committeeSeats()
+    {
+        return $this->hasMany(TenderCommitteeMember::class, 'tender_id');
     }
 
     public function queries()
@@ -410,6 +429,107 @@ class Tender extends Model
      *
      * Permitted, but the officer is told before they commit, and the record shows it.
      */
+    // ─── Who opens, and who holds a code ────────────────────────────────────
+
+    /**
+     * Was this tender raised by a Tender Owner rather than by the Purchase Officer?
+     *
+     * Decided by the creator's role rather than a stored flag, so a tender does not have to
+     * be migrated when roles are reassigned. owner_id and created_by are set to the same
+     * person at creation; owner_id is preferred because ownership can be transferred and the
+     * creator cannot.
+     */
+    public function isOwnerCreated(): bool
+    {
+        $creator = $this->owner ?: $this->creator;
+
+        return $creator !== null && $creator->hasRole('tender-owner');
+    }
+
+    /**
+     * May this user start the opening?
+     *
+     * A tender the Purchase Officer raised is opened by the officer, as before. A tender a
+     * Tender Owner raised is opened by that owner — and the officer then holds one of the
+     * codes instead, so neither of them can open a tender by themselves.
+     *
+     * Super Admin is allowed either way. That is deliberate: somebody has to be able to act
+     * when an owner leaves or an account is locked out, and Super Admin is the role that
+     * already carries every other such power in this system.
+     */
+    public function mayBeOpenedBy(User $user): bool
+    {
+        if ($user->hasRole('super-admin')) {
+            return true;
+        }
+
+        if ($this->isOwnerCreated()) {
+            return (int) $this->owner_id === (int) $user->id;
+        }
+
+        return $user->hasRole('admin');
+    }
+
+    /** Said back to whoever was refused, so the refusal names the right person. */
+    public function openingStarterDescription(): string
+    {
+        if ($this->isOwnerCreated()) {
+            return 'the Tender Owner who created it' . ($this->owner ? ' (' . $this->owner->name . ')' : '');
+        }
+
+        return 'the Purchase Officer';
+    }
+
+    /**
+     * Everyone who must supply a one-time code before this tender can open.
+     *
+     * Three groups, and the holder_role on each row records which:
+     *
+     *   main    — the standing Purchase Committee, in the Super Admin's order
+     *   officer — the Purchase Officer, but only on an owner-created tender, where the
+     *             officer is not the one starting the opening
+     *   add-on  — members approved onto this particular tender
+     *
+     * Returned as user_id => holder_role, de-duplicated: somebody who is both a main member
+     * and an add-on on this tender holds one code, not two, and is described by the stronger
+     * of the two claims.
+     */
+    public function openingCodeHolders(): \Illuminate\Support\Collection
+    {
+        $holders = collect();
+
+        foreach (PurchaseCommitteeMember::active()->ordered()->get() as $member) {
+            if ($member->user_id) {
+                $holders->put((int) $member->user_id, 'main');
+            }
+        }
+
+        if ($this->isOwnerCreated()) {
+            // Whoever holds the Purchase Officer role. Super Admins are not pulled in here:
+            // they are the fallback opener, and a fallback that also holds a code could open
+            // a tender alone.
+            foreach (User::role('admin')->get() as $officer) {
+                if (!$holders->has((int) $officer->id)) {
+                    $holders->put((int) $officer->id, 'officer');
+                }
+            }
+        }
+
+        foreach ($this->committeeSeats()->approved()->get() as $seat) {
+            if ($seat->user_id && !$holders->has((int) $seat->user_id)) {
+                $holders->put((int) $seat->user_id, 'add-on');
+            }
+        }
+
+        // The person starting the opening must never hold a code for it — that would put both
+        // halves of the control in one pair of hands.
+        if ($this->isOwnerCreated() && $this->owner_id) {
+            $holders->forget((int) $this->owner_id);
+        }
+
+        return $holders;
+    }
+
     public function isOpeningAheadOfSchedule(): bool
     {
         return !$this->isBidOpen() && !$this->hasOpeningMomentArrived();
@@ -550,8 +670,10 @@ class Tender extends Model
         if ($user->hasRole('super-admin')) return true;
         if ($user->hasRole('admin')) return true;
         if ($this->isOwner($userId)) return true;
-        if ($this->committeeMembers()->where('user_id', $userId)->wherePivot('is_active', true)->exists()) return true;
-        
+        // committeeMembers() is already scoped to approved, active seats, so a pending
+        // request grants no access while it waits.
+        if ($this->committeeMembers()->where('user_id', $userId)->exists()) return true;
+
         return false;
     }
 

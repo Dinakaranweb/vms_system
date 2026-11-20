@@ -19,7 +19,8 @@
             This order governs <strong>vendor registrations</strong>, <strong>award recommendations</strong>
             and <strong>additions to a tender's committee</strong>. Members act one at a time — the 2nd
             member can't act until the 1st has approved. Active members also hold the one-time
-            codes that open a tender. Drag rows to reorder, then save.
+            codes that open a tender, and apart from the Purchase Officer on a tender raised by
+            a Tender Owner, nobody else does. Drag rows to reorder, then save.
         </p>
         <a href="{{ route('super-admin.purchase-committee.create') }}" class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition inline-flex items-center gap-2">
             <i class="fas fa-plus"></i> Add Member

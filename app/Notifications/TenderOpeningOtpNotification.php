@@ -3,6 +3,7 @@
 namespace App\Notifications;
 
 use App\Models\Tender;
+use App\Services\OpeningCodeMailer;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
@@ -24,7 +25,13 @@ class TenderOpeningOtpNotification extends Notification
         public Tender $tender,
         public string $code,
         public \DateTimeInterface $expiresAt,
-        public ?string $officerName = null
+        public ?string $officerName = null,
+        /**
+         * The tender_review_otps row this code belongs to, so the MessageSent listener can
+         * record the mail server's reply against it. Nullable because the code itself does
+         * not depend on it - without it the mail still goes, just unreported.
+         */
+        public ?int $codeRowId = null
     ) {}
 
     public function via($notifiable): array
@@ -36,7 +43,7 @@ class TenderOpeningOtpNotification extends Notification
     {
         $officer = $this->officerName ? " by {$this->officerName}" : '';
 
-        return (new MailMessage)
+        $mail = (new MailMessage)
             ->subject("Your opening code for Tender #{$this->tender->tender_number}")
             ->greeting("Hello {$notifiable->name},")
             ->line("Opening has been initiated{$officer} for:")
@@ -45,6 +52,16 @@ class TenderOpeningOtpNotification extends Notification
             ->line('Share this code with the Purchase Officer in person. The officer enters every committee member\'s code together, and the tender opens only once all of them have been entered.')
             ->line('This code expires at ' . $this->expiresAt->format('d M Y, h:i A') . '. Do not forward it by email or message.')
             ->line('Once the tender is open, the submitted documents become available in your own login.');
+
+        // Carries the row id out and back so the reply can be matched to the right holder
+        // rather than guessed from the recipient address. Metadata only - never the code.
+        if ($this->codeRowId !== null) {
+            $mail->withSymfonyMessage(function ($message) {
+                $message->getHeaders()->addTextHeader(OpeningCodeMailer::ROW_HEADER, (string) $this->codeRowId);
+            });
+        }
+
+        return $mail;
     }
 
     public function toArray($notifiable): array

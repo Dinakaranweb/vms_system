@@ -44,10 +44,11 @@
         </dl>
 
         @if($seat->tender && $seat->tender->isOpeningOtpPending())
-            <div class="px-6 py-3 bg-amber-50 border-t border-amber-100 text-xs text-amber-800">
-                <i class="fas fa-triangle-exclamation mr-1.5"></i>
-                This tender is mid-opening. Approving will issue this person an opening code as
-                well, and the tender cannot open until theirs has been collected too.
+            <div class="px-6 py-3 bg-blue-50 border-t border-blue-100 text-xs text-blue-800">
+                <i class="fas fa-circle-info mr-1.5"></i>
+                This tender is mid-opening. Approving does not affect that — opening codes are
+                the Purchase Committee's, and this person is not issued one. They will see the
+                documents once every code has been collected.
             </div>
         @endif
     </div>

@@ -54,7 +54,7 @@ class TenderCommitteeRequestNotification extends Notification
             . ($this->step->designation ? " ({$this->step->designation})" : ''));
 
         if ($this->isFinalStep) {
-            $mail->line('**You are the final approver.** Approving adds them to the tender, tells them so, and gives them an opening code if that tender is mid-opening.');
+            $mail->line('**You are the final approver.** Approving adds them to the tender and tells them so. It does not give them an opening code: those are the Purchase Committee\'s, and they stay that way whoever is added to a tender.');
         } else {
             $mail->line('Once you approve, the request passes to the next member in the order. Nothing reaches the person put forward until the final approver has signed off.');
         }

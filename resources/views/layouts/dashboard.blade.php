@@ -1095,7 +1095,82 @@
 
 </div>
 
+{{-- =================== TOAST =================== --}}
+{{-- One toast for every screen under this layout. It exists because some actions - starting a
+     tender opening above all - have an outcome per recipient rather than a single pass or
+     fail, and a browser alert() cannot show a list. A toast carrying failures does NOT
+     auto-dismiss: the person has to read who was not reached before it goes. --}}
+<div id="vmsToast" class="fixed bottom-5 right-5 z-[9999] hidden max-w-sm w-[22rem]">
+    <div id="vmsToastCard" class="rounded-xl shadow-2xl overflow-hidden text-white">
+        <div class="flex items-start gap-3 px-4 py-3">
+            <i id="vmsToastIcon" class="fas fa-check-circle mt-0.5 flex-shrink-0"></i>
+            <div class="min-w-0 flex-1">
+                <p id="vmsToastMessage" class="text-sm leading-snug"></p>
+                <ul id="vmsToastList" class="mt-2 space-y-1 text-xs text-white/90 hidden"></ul>
+            </div>
+            <button type="button" onclick="vmsToastHide()" class="flex-shrink-0 text-white/70 hover:text-white" aria-label="Dismiss">
+                <i class="fas fa-xmark"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
 <script>
+    /**
+     * vmsToast(message, type, details)
+     *   type    'success' | 'error' | 'warning'
+     *   details optional array of {name, email, detail} rows listed under the message - used
+     *           for per-recipient outcomes, e.g. which code holders could not be emailed.
+     * A toast with details, or of type error/warning, stays until dismissed.
+     */
+    window.vmsToast = function (message, type, details) {
+        const box  = document.getElementById('vmsToast');
+        const card = document.getElementById('vmsToastCard');
+        const icon = document.getElementById('vmsToastIcon');
+        const list = document.getElementById('vmsToastList');
+        if (!box) { alert(message); return; }
+
+        const skin = {
+            success: ['bg-emerald-600', 'fa-circle-check'],
+            warning: ['bg-amber-600',   'fa-triangle-exclamation'],
+            error:   ['bg-red-600',     'fa-circle-exclamation'],
+        }[type] || ['bg-emerald-600', 'fa-circle-check'];
+
+        card.className = 'rounded-xl shadow-2xl overflow-hidden text-white ' + skin[0];
+        icon.className = 'fas mt-0.5 flex-shrink-0 ' + skin[1];
+        document.getElementById('vmsToastMessage').textContent = message || '';
+
+        list.innerHTML = '';
+        const rows = Array.isArray(details) ? details : [];
+        rows.forEach(r => {
+            const li = document.createElement('li');
+            const who = document.createElement('span');
+            who.className = 'font-semibold';
+            who.textContent = r.name || 'Unknown';
+            li.appendChild(who);
+            // textContent throughout: a mail server's reply is text from outside this app and
+            // is never treated as markup.
+            li.appendChild(document.createTextNode(
+                (r.email ? ' (' + r.email + ')' : '') + (r.detail ? ' — ' + r.detail : '')
+            ));
+            list.appendChild(li);
+        });
+        list.classList.toggle('hidden', rows.length === 0);
+
+        box.classList.remove('hidden');
+        clearTimeout(window.__vmsToastTimer);
+
+        // Anything the person needs to act on waits for them. Plain confirmations do not.
+        if (type === 'success' && rows.length === 0) {
+            window.__vmsToastTimer = setTimeout(vmsToastHide, 6000);
+        }
+    };
+
+    window.vmsToastHide = function () {
+        const box = document.getElementById('vmsToast');
+        if (box) { box.classList.add('hidden'); }
+    };
+
     document.addEventListener('alpine:init', () => {
         // Additional Alpine initialization if needed
     });

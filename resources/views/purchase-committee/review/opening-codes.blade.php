@@ -63,9 +63,11 @@
                     $member = $otp->committeeMember;
                     $desig  = $members->get($otp->committee_member_id)?->designation;
 
-                    // A code holder is here for one of three reasons, and the row should say
-                    // which. Only a *main* member missing from the active committee is stale:
-                    // the Purchase Officer and add-on members were never in that list.
+                    // A code holder is here for one of two reasons - the standing committee,
+                    // or the Purchase Officer on an owner-raised tender - and the row should
+                    // say which. Only a *main* member missing from the active committee is
+                    // stale; the officer was never in that list. The 'add-on' arm below is
+                    // kept for rows issued while per-tender members briefly held codes too.
                     $holderRole = $otp->holder_role ?: 'main';
                     $isStale    = $holderRole === 'main' && !$members->has($otp->committee_member_id);
                     $roleLabel  = match ($holderRole) {
@@ -96,6 +98,19 @@
                             <span class="ml-1 text-[0.65rem] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">no longer active</span>
                             @endif
                         </p>
+                        {{-- Where the code was sent, and what the mail server made of it. The
+                             address is shown because a refused send is almost always a wrong
+                             address, and this is the screen the person chasing it is on. --}}
+                        @if(!$otp->isVerified() && $otp->mail_status)
+                        <p class="text-xs truncate {{ $otp->mailTone() === 'danger' ? 'text-red-600' : 'text-gray-400' }}">
+                            <i class="fas {{ $otp->mailTone() === 'danger' ? 'fa-triangle-exclamation' : 'fa-paper-plane' }} mr-1"></i>
+                            {{ $otp->mailLabel() }}@if($member?->email) · {{ $member->email }}@endif
+                            @if($otp->mailFailed() && trim((string) $otp->mail_response) !== '')
+                            <span class="block text-[0.7rem] text-red-500 mt-0.5 whitespace-normal">{{ $otp->mail_response }}</span>
+                            <span class="block text-[0.7rem] text-gray-400 whitespace-normal">Their code is still in their own login notifications — ask them to read it from there, or fix the address and resend.</span>
+                            @endif
+                        </p>
+                        @endif
                         <p class="text-xs text-gray-400 truncate">
                             {{ $roleLabel }}
                             @if($otp->isVerified())
@@ -163,3 +178,34 @@
     </p>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+{{-- Raised here rather than on the screen the opening was started from: that one redirects
+     here immediately, so a toast there would never be read. --}}
+@if(session('opening_mail'))
+@php
+    $flashed = session('opening_mail');
+    // Narrowed to the three fields the toast lists, so nothing else that happens to be in the
+    // flashed report can reach the page.
+    $toastRows = array_map(function ($r) {
+        return [
+            'name'   => (string) ($r['name'] ?? ''),
+            'email'  => (string) ($r['email'] ?? ''),
+            'detail' => (string) ($r['detail'] ?? ''),
+        ];
+    }, $flashed['unreachable'] ?? []);
+@endphp
+document.addEventListener('DOMContentLoaded', function () {
+    {{-- Hex-escaped because part of this text is the mail server's own reply, which is
+         foreign input: an unescaped "</script>" in it would otherwise end this block. --}}
+    @php $jsonFlags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT; @endphp
+    vmsToast(
+        @json($flashed['message'] ?? '', $jsonFlags),
+        @json($flashed['tone'] ?? 'success', $jsonFlags),
+        @json($toastRows, $jsonFlags)
+    );
+});
+@endif
+</script>
+@endpush

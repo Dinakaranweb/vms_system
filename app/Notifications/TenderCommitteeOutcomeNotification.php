@@ -49,7 +49,7 @@ class TenderCommitteeOutcomeNotification extends Notification
                 ->line('They have been emailed about the assignment and can now see this tender.');
 
             if ($tender && $tender->isOpeningOtpPending()) {
-                $mail->line('This tender is mid-opening, so they now hold an opening code as well — it has to be collected before the tender can open.');
+                $mail->line('This tender is mid-opening. That is unaffected — opening codes are held by the Purchase Committee, not by members added to a single tender — and they will see the documents once every code has been collected.');
             }
         } else {
             $mail->error()

@@ -168,18 +168,17 @@ class TenderCommitteeApprovalChain
         $this->announceSeat($seat, $tender, $member);
         $this->notifyOutcome($seat, approved: true, decidedBy: $actor->name);
 
-        $codeNote = $tender && $tender->isOpeningOtpPending()
-            ? ' This tender is mid-opening, so ' . ($member->name ?? 'they')
-              . ' has been issued an opening code too and it must be collected before it opens.'
+        // A member added onto one tender holds no opening code, so approving them mid-opening
+        // neither delays the opening nor adds a code to collect. They read the documents once
+        // the standing committee has opened it.
+        $openingNote = $tender && $tender->isOpeningOtpPending()
+            ? ' This tender is mid-opening; that is unaffected, and ' . ($member->name ?? 'they')
+              . ' will see the documents once the Purchase Committee\'s codes are all in.'
             : '';
-
-        if ($codeNote !== '') {
-            $this->issueCodeIfOpeningUnderway($seat);
-        }
 
         return ['ok' => true, 'final' => true,
                 'message' => 'Approved. ' . ($member->name ?? 'The member')
-                    . ' is now on this tender\'s committee and has been told.' . $codeNote];
+                    . ' is now on this tender\'s committee and has been told.' . $openingNote];
     }
 
     /**
@@ -278,26 +277,6 @@ class TenderCommitteeApprovalChain
             Log::info("Committee assignment email sent to {$member->email} for tender {$tender->id}.");
         } catch (\Throwable $e) {
             Log::error("Committee assignment email failed for seat {$seat->id}: " . $e->getMessage());
-        }
-    }
-
-    /**
-     * An opening already under way does not restart for a new member, but it cannot complete
-     * without them either, since an approved add-on holds a code like anyone else.
-     */
-    private function issueCodeIfOpeningUnderway(TenderCommitteeMember $seat): void
-    {
-        $tender = $seat->tender;
-
-        if (!$tender || !$tender->isOpeningOtpPending() || !$seat->user) {
-            return;
-        }
-
-        try {
-            app(\App\Http\Controllers\TenderReviewController::class)
-                ->issueOpeningOtpFor($tender, $seat->user, 'add-on');
-        } catch (\Throwable $e) {
-            Log::error("Could not issue an opening code to new add-on member {$seat->user_id} on tender {$tender->id}: " . $e->getMessage());
         }
     }
 

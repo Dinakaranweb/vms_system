@@ -1045,12 +1045,14 @@ function openBidding(id, willCloseSubmissions, scheduledOpening) {
     headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken }
   }).then(r => r.json()).then(data => {
     if (data.success) {
-      alert(data.message);
-      /* Straight to the screen where the officer keys in the members' codes. */
+      /* Straight to the screen where the officer keys in the members' codes. What the mail
+         server said about each code is raised as a toast there, beside the holder it is
+         about, rather than in a dialog that this navigation would immediately discard. */
       window.location.href = data.redirect || window.location.href;
+      return;
     }
-    else alert(data.message || 'Failed to open bidding.');
-  });
+    vmsToast(data.message || 'Failed to open bidding.', 'error');
+  }).catch(() => vmsToast('Could not reach the server to open this tender.', 'error'));
 }
 
 function deleteTender(id) {

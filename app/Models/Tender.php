@@ -483,16 +483,19 @@ class Tender extends Model
     /**
      * Everyone who must supply a one-time code before this tender can open.
      *
-     * Three groups, and the holder_role on each row records which:
+     * Two groups, and the holder_role on each row records which:
      *
      *   main    — the standing Purchase Committee, in the Super Admin's order
      *   officer — the Purchase Officer, but only on an owner-created tender, where the
      *             officer is not the one starting the opening
-     *   add-on  — members approved onto this particular tender
      *
-     * Returned as user_id => holder_role, de-duplicated: somebody who is both a main member
-     * and an add-on on this tender holds one code, not two, and is described by the stronger
-     * of the two claims.
+     * Members added onto one particular tender do NOT hold a code, however they got there.
+     * The seal is the standing committee's to break, and widening the set of codes to
+     * whoever was invited onto a tender would mean the people who can open it change from
+     * tender to tender. They still read the documents once it is open - see
+     * isReviewUnlockedFor() - they just do not gate the opening.
+     *
+     * Returned as user_id => holder_role.
      */
     public function openingCodeHolders(): \Illuminate\Support\Collection
     {
@@ -512,12 +515,6 @@ class Tender extends Model
                 if (!$holders->has((int) $officer->id)) {
                     $holders->put((int) $officer->id, 'officer');
                 }
-            }
-        }
-
-        foreach ($this->committeeSeats()->approved()->get() as $seat) {
-            if ($seat->user_id && !$holders->has((int) $seat->user_id)) {
-                $holders->put((int) $seat->user_id, 'add-on');
             }
         }
 
@@ -630,17 +627,33 @@ class Tender extends Model
     }
 
     /**
-     * A committee member can view/comment on this tender's applications once review has been
-     * opened AND that specific member has verified their own OTP for it.
+     * Whether this person may read and comment on the tender's applications.
+     *
+     * Review has to be open either way. Beyond that there are two ways in:
+     *
+     *   - a code holder who has had their own code collected, which is the standing Purchase
+     *     Committee and, on an owner-created tender, the Purchase Officer;
+     *   - somebody approved onto this particular tender's committee.
+     *
+     * The second group holds no code (see openingCodeHolders()), so requiring one would have
+     * left them approved onto a tender they could never read. They cannot reach anything
+     * until the code holders have opened it, so the seal is unaffected: the committee that
+     * breaks it is still the standing one.
      */
     public function isReviewUnlockedFor(int $userId): bool
     {
         if (!$this->isReviewOpen()) return false;
 
-        return $this->reviewOtps()
+        $hasCollectedCode = $this->reviewOtps()
             ->where('committee_member_id', $userId)
             ->whereNotNull('otp_verified_at')
             ->exists();
+
+        if ($hasCollectedCode) {
+            return true;
+        }
+
+        return $this->committeeSeats()->approved()->where('user_id', $userId)->exists();
     }
 
     public function isPrivate(): bool

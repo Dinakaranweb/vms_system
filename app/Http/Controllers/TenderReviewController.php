@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Models\Vendor;
 use App\Notifications\TenderDocumentsSharedNotification;
 use App\Notifications\TenderOpeningOtpNotification;
+use App\Services\OpeningCodeMailer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -228,9 +229,22 @@ class TenderReviewController extends Controller
             return back()->withErrors(['general' => 'That member\'s code has already been accepted.']);
         }
 
-        $this->issueOpeningOtp($reviewOtp, auth()->user()->name);
+        $outcome = app(OpeningCodeMailer::class)->issue($reviewOtp, auth()->user()->name);
+        $who = $reviewOtp->committeeMember->name;
 
-        return back()->with('success', 'A fresh code has been sent to ' . $reviewOtp->committeeMember->name . '\'s login. Ask them to read out the new one.');
+        // The code is in their login either way - the mail is the part that can fail, so the
+        // officer is told which of the two actually happened rather than a flat "sent".
+        if (!$outcome['ok']) {
+            return back()
+                ->with('success', 'A fresh code is waiting in ' . $who . '\'s login notifications.')
+                ->withErrors(['general' => 'The email to ' . $who . ' (' . $reviewOtp->committeeMember->email
+                    . ') did not go out: ' . $outcome['detail']
+                    . ' Ask them to read the code from their login instead.']);
+        }
+
+        return back()->with('success', 'A fresh code has been sent to ' . $who
+            . '\'s login and accepted by the mail server for ' . $reviewOtp->committeeMember->email
+            . '. Ask them to read out the new one.');
     }
 
     /**
@@ -466,48 +480,9 @@ class TenderReviewController extends Controller
      * and inbox. Deliberately never returned to the caller: the officer is meant to learn the
      * code only from the member, in person.
      */
-    /**
-     * Issue a code to one person on a tender whose opening is already under way.
-     *
-     * Used when an add-on committee member is approved mid-opening: the opening does not
-     * restart, but an approved add-on holds a code like anybody else, so it cannot complete
-     * without theirs either. Public because the committee approval chain is what grants the
-     * seat and therefore what has to trigger this.
-     */
-    public function issueOpeningOtpFor(Tender $tender, User $user, string $holderRole = 'add-on'): void
+    private function issueOpeningOtp(TenderReviewOtp $reviewOtp, ?string $officerName = null): array
     {
-        $reviewOtp = TenderReviewOtp::firstOrCreate(
-            ['tender_id' => $tender->id, 'committee_member_id' => $user->id],
-            ['holder_role' => $holderRole]
-        );
-
-        if ($reviewOtp->isVerified()) {
-            return;
-        }
-
-        $this->issueOpeningOtp($reviewOtp, $tender->bidOpenedBy->name ?? null);
-    }
-
-    private function issueOpeningOtp(TenderReviewOtp $reviewOtp, ?string $officerName = null): void
-    {
-        $code = (string) random_int(100000, 999999);
-        $expiresAt = now()->addMinutes(30);
-
-        $reviewOtp->update([
-            'otp_code'         => $code,
-            'otp_expires_at'   => $expiresAt,
-            'otp_sent_at'      => now(),
-            'otp_verified_at'  => null,
-            'otp_collected_by' => null,
-        ]);
-
-        try {
-            $reviewOtp->committeeMember->notify(
-                new TenderOpeningOtpNotification($reviewOtp->tender ?? $reviewOtp->tender()->first(), $code, $expiresAt, $officerName)
-            );
-        } catch (\Exception $e) {
-            \Log::error('TenderOpeningOtpNotification failed for user ' . $reviewOtp->committee_member_id . ': ' . $e->getMessage());
-        }
+        return app(OpeningCodeMailer::class)->issue($reviewOtp, $officerName);
     }
 
     /**
@@ -548,12 +523,16 @@ class TenderReviewController extends Controller
     {
         $applicationCount = TenderApplication::where('tender_id', $tender->id)->count();
 
-        // Everyone who supplied a code for this opening, which is the standing Purchase
-        // Committee plus any add-on members approved onto this tender and, on an
-        // owner-created tender, the Purchase Officer. Reading it from the codes rather than
-        // from the committee table means the people told about the documents are exactly the
-        // people whose codes unlocked them.
-        $recipientIds = $tender->reviewOtps()->pluck('committee_member_id')->filter()->unique();
+        // Everyone who can now read the documents, which is the same test the document gate
+        // itself applies (Tender::isReviewUnlockedFor):
+        //   - everyone who supplied a code for this opening - the standing Purchase Committee
+        //     and, on an owner-created tender, the Purchase Officer;
+        //   - everyone approved onto this particular tender's committee, who hold no code but
+        //     are here to review.
+        $recipientIds = $tender->reviewOtps()->pluck('committee_member_id')
+            ->merge($tender->committeeSeats()->approved()->pluck('user_id'))
+            ->filter()
+            ->unique();
 
         foreach (User::whereIn('id', $recipientIds)->get() as $recipient) {
             try {

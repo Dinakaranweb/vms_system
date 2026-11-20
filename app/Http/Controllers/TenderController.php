@@ -659,8 +659,10 @@ class TenderController extends Controller
         $closesNow       = $tender->willCloseSubmissionsOnOpening();
 
         $issued = 0;
+        // One entry per holder we tried to mail, carrying what the mail server said about it.
+        $report = [];
 
-        DB::transaction(function () use ($tender, $user, $holders, $closesNow, &$issued) {
+        DB::transaction(function () use ($tender, $user, $holders, $closesNow, &$issued, &$report) {
             $tender->update(['bid_opened_by' => $user->id]);
 
             // An officer may open on or before the advertised date, but never while bids are
@@ -695,8 +697,17 @@ class TenderController extends Controller
                     continue;
                 }
 
-                $this->issueOpeningOtp($reviewOtp, $user->name);
+                $outcome = $this->issueOpeningOtp($reviewOtp, $user->name);
                 $issued++;
+
+                $report[] = [
+                    'name'   => $reviewOtp->committeeMember->name ?? 'Unknown holder',
+                    'email'  => $reviewOtp->committeeMember->email ?? null,
+                    'role'   => $holderRole,
+                    'status' => $outcome['status'],
+                    'detail' => $outcome['detail'],
+                    'ok'     => $outcome['ok'],
+                ];
             }
         });
 
@@ -717,38 +728,48 @@ class TenderController extends Controller
                 . $scheduledFor->format('d M Y, h:i A') . '. ' . $message;
         }
 
+        // Which of those codes actually left the building. A refusal is reported on the screen
+        // rather than only in the log, because the person collecting codes is the one who has
+        // to go and find the holder another way, and they are standing here right now.
+        $unreachable = array_values(array_filter($report, fn($r) => !$r['ok']));
+
+        if ($unreachable !== []) {
+            $message .= ' ' . count($unreachable) . ' of them could not be emailed — their code is still in their login notifications.';
+        }
+
+        // Flashed rather than only returned, because this request is a fetch() that redirects
+        // straight to the code screen - a toast raised here would be torn down by the
+        // navigation. The screen they land on raises it instead, next to the holders it is
+        // about, and the outcome is on each row there for as long as the opening lasts.
+        session()->flash('opening_mail', [
+            'message'     => $message,
+            'tone'        => $unreachable === [] ? 'success' : 'warning',
+            'unreachable' => $unreachable,
+        ]);
+
         return response()->json([
             'success'  => true,
             'redirect' => route('purchase-committee.review.opening-codes', $tender->id),
             'message'  => $message,
+            // Per-holder so a caller that does not redirect can list who was not reached.
+            'mail'     => [
+                'total'       => count($report),
+                'accepted'    => count($report) - count($unreachable),
+                'unreachable' => $unreachable,
+            ],
         ]);
     }
 
     /**
-     * Generates a member's code and pushes it to that member's own notifications (and inbox).
-     * The code is deliberately never surfaced to the officer here — the officer only learns it
-     * when the member reads it out to them.
+     * Generates a holder's code, mails it, and reports what the mail server said.
+     *
+     * The code is deliberately never surfaced to the opener here — they only learn it when the
+     * holder reads it out to them. OpeningCodeMailer does the work so that this button and the
+     * resend button on the opening screen behave and report identically.
      */
-    private function issueOpeningOtp(TenderReviewOtp $reviewOtp, ?string $officerName = null): void
+    private function issueOpeningOtp(TenderReviewOtp $reviewOtp, ?string $officerName = null): array
     {
-        $code = (string) random_int(100000, 999999);
-        $expiresAt = now()->addMinutes(30);
-
-        $reviewOtp->update([
-            'otp_code'         => $code,
-            'otp_expires_at'   => $expiresAt,
-            'otp_sent_at'      => now(),
-            'otp_verified_at'  => null,
-            'otp_collected_by' => null,
-        ]);
-
-        try {
-            $reviewOtp->committeeMember->notify(
-                new TenderOpeningOtpNotification($reviewOtp->tender, $code, $expiresAt, $officerName)
-            );
-        } catch (\Exception $e) {
-            \Log::error('TenderOpeningOtpNotification failed for user ' . $reviewOtp->committee_member_id . ': ' . $e->getMessage());
-        }
+        return app(\App\Services\OpeningCodeMailer::class)->issue($reviewOtp, $officerName);
     }
 
     /**

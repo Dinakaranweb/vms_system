@@ -348,12 +348,13 @@ function openBidding(id, willCloseSubmissions, scheduledOpening) {
         headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken }
     }).then(r => r.json()).then(data => {
         if (data.success) {
-            alert(data.message);
+            /* On to the code screen. The toast describing what the mail server made of each
+               code is raised there, where the holders are listed. */
             window.location.href = data.redirect || window.location.href;
-        } else {
-            alert(data.message || 'Failed to open the tender.');
+            return;
         }
-    });
+        vmsToast(data.message || 'Failed to open the tender.', 'error');
+    }).catch(() => vmsToast('Could not reach the server to open this tender.', 'error'));
 }
 
 function publishTender(id) {

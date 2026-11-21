@@ -1,0 +1,337 @@
+<!--
+  VMRF-DU — live tender list for the university website.
+
+  Paste this whole block into any page, Custom HTML block or widget. It has no dependencies:
+  no jQuery, no CDN, nothing to install. It reads the public feed published by the Vendor
+  Management System and renders whatever is currently flagged "show on university".
+
+  Only the CONFIG block below is meant to be edited.
+
+  What the feed contains: tenders that are published, flagged for the university page, and
+  whose submission deadline has not passed. Nothing else is exposed — no bids, no vendor
+  details, no internal documents. Removing the flag in the VMS removes it from this page
+  within a minute.
+-->
+
+<div id="vmrf-tenders" class="vmrf-tenders" aria-live="polite">
+  <div class="vmrf-state">Loading current tenders&hellip;</div>
+</div>
+
+<style>
+  /* Everything is prefixed so it cannot collide with the site's own stylesheet. */
+  .vmrf-tenders {
+    --vmrf-ink: #1f2937;
+    --vmrf-muted: #6b7280;
+    --vmrf-line: #e5e7eb;
+    --vmrf-brand: #1e3a8a;
+    --vmrf-brand-soft: #eef2ff;
+    --vmrf-urgent: #b91c1c;
+    font-family: inherit;
+    color: var(--vmrf-ink);
+    line-height: 1.5;
+  }
+  .vmrf-tenders *, .vmrf-tenders *::before, .vmrf-tenders *::after { box-sizing: border-box; }
+
+  .vmrf-state {
+    padding: 24px 16px;
+    text-align: center;
+    color: var(--vmrf-muted);
+    border: 1px dashed var(--vmrf-line);
+    border-radius: 8px;
+  }
+  .vmrf-state.is-error { color: var(--vmrf-urgent); border-color: currentColor; }
+
+  .vmrf-list { display: grid; gap: 16px; margin: 0; padding: 0; list-style: none; }
+
+  .vmrf-card {
+    border: 1px solid var(--vmrf-line);
+    border-left: 4px solid var(--vmrf-brand);
+    border-radius: 8px;
+    padding: 16px 18px;
+    background: #fff;
+  }
+
+  .vmrf-no { font-size: 0.8rem; letter-spacing: 0.04em; color: var(--vmrf-muted); text-transform: uppercase; }
+  .vmrf-title { margin: 2px 0 8px; font-size: 1.1rem; font-weight: 600; color: var(--vmrf-brand); }
+  .vmrf-desc { margin: 0 0 12px; color: var(--vmrf-ink); }
+
+  .vmrf-meta { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 0 0 14px; padding: 0; }
+  .vmrf-meta > div { min-width: 0; }
+  .vmrf-meta dt { font-size: 0.78rem; color: var(--vmrf-muted); margin: 0; }
+  .vmrf-meta dd { margin: 0; font-weight: 600; }
+
+  .vmrf-foot { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+
+  .vmrf-left { font-size: 0.85rem; color: var(--vmrf-muted); }
+  .vmrf-left.is-urgent { color: var(--vmrf-urgent); font-weight: 600; }
+
+  .vmrf-apply {
+    display: inline-block; padding: 9px 18px; border-radius: 6px;
+    background: var(--vmrf-brand); color: #fff; text-decoration: none; font-weight: 600;
+  }
+  .vmrf-apply:hover, .vmrf-apply:focus { background: #172b63; color: #fff; text-decoration: none; }
+
+  .vmrf-tag {
+    display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px;
+    background: var(--vmrf-brand-soft); color: var(--vmrf-brand);
+    font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em;
+    vertical-align: middle;
+  }
+
+  .vmrf-updated { margin-top: 14px; font-size: 0.78rem; color: var(--vmrf-muted); text-align: right; }
+
+  @media (max-width: 540px) {
+    .vmrf-foot { flex-direction: column; align-items: stretch; }
+    .vmrf-apply { text-align: center; }
+  }
+</style>
+
+<script>
+(function () {
+  'use strict';
+
+  // ----------------------------------------------------------------- CONFIG
+  var CONFIG = {
+    // The tender portal, INCLUDING http:// or https://. No trailing slash.
+    //
+    // Leaving the scheme off is the one mistake that breaks this silently: a bare
+    // "192.168.1.5:8099" is a relative path to a browser, so it gets looked for underneath
+    // your own page and never reaches the portal. The code below catches that and says so
+    // in the browser console, but set it correctly and the question never arises.
+    //
+    //   live    : https://tenders.vinayakamissions.edu.in
+    //   testing : http://192.168.32.249:8099
+    portal: 'https://tenders.vinayakamissions.edu.in',
+
+    // How many to show. The feed itself caps at 100.
+    limit: 10,
+
+    // Where the button sends people. There is no public page per tender: a bidder has to
+    // register as a vendor and sign in before they can see documents or submit anything,
+    // so this points at registration.
+    applyUrl: 'https://tenders.vinayakamissions.edu.in/register',
+
+    // Re-fetch while the page stays open, in minutes. 0 turns it off.
+    refreshMinutes: 10,
+
+    // Shown when nothing is open. Keep it reassuring: an empty list is normal.
+    emptyMessage: 'There are no open tenders at the moment. Please check back later.'
+  };
+  // -------------------------------------------------------------- END CONFIG
+
+  var root = document.getElementById('vmrf-tenders');
+  if (!root) return;
+
+  /**
+   * Repairs the two configuration slips that otherwise fail without explanation: a missing
+   * scheme, and a trailing slash. Anything it changes is reported in the console so whoever
+   * installed this can see what was assumed.
+   */
+  function normalisePortal(raw) {
+    var value = String(raw || '').trim().replace(/\/+$/, '');
+
+    if (!value) {
+      console.error('[VMRF tenders] CONFIG.portal is empty. Set it to the portal address, including https://');
+      return '';
+    }
+
+    if (!/^https?:\/\//i.test(value)) {
+      var assumed = (window.location.protocol === 'https:' ? 'https://' : 'http://') + value;
+      console.warn(
+        '[VMRF tenders] CONFIG.portal has no http:// or https:// — "' + value + '".\n' +
+        'Without a scheme the browser treats it as a path on this site, so the tender list ' +
+        'cannot load. Assuming "' + assumed + '". Please set it properly in the CONFIG block.'
+      );
+      return assumed;
+    }
+
+    // An https page cannot read an http address: the browser blocks it as mixed content.
+    if (window.location.protocol === 'https:' && /^http:\/\//i.test(value)) {
+      console.error(
+        '[VMRF tenders] This page is served over https but CONFIG.portal is http (' + value + ').\n' +
+        'The browser will block the request as mixed content. Use the https address of the portal.'
+      );
+    }
+
+    return value;
+  }
+
+  var portal = normalisePortal(CONFIG.portal);
+  var endpoint = portal + '/api/public/university/tenders?limit=' + encodeURIComponent(CONFIG.limit);
+
+  /** Build an element with text set safely. Never assign feed values via innerHTML. */
+  function el(tag, className, text) {
+    var n = document.createElement(tag);
+    if (className) n.className = className;
+    if (text !== undefined && text !== null && text !== '') n.textContent = String(text);
+    return n;
+  }
+
+  function state(message, isError) {
+    root.innerHTML = '';
+    var d = el('div', 'vmrf-state' + (isError ? ' is-error' : ''), message);
+    root.appendChild(d);
+  }
+
+  /** The failure notice a member of the public sees: plain words and a working link. */
+  function unavailable() {
+    root.innerHTML = '';
+    var d = el('div', 'vmrf-state is-error', 'Tender information is temporarily unavailable. Please visit ');
+    if (portal) {
+      var a = el('a', null, portal.replace(/^https?:\/\//i, ''));
+      a.href = portal;
+      a.rel = 'noopener';
+      d.appendChild(a);
+    }
+    d.appendChild(document.createTextNode('.'));
+    root.appendChild(d);
+  }
+
+  /** 2026-11-21 -> 21 Nov 2026. Parsed as parts, not Date(string), to avoid timezone drift. */
+  function formatDate(iso) {
+    if (!iso) return '—';
+    var p = String(iso).split('-');
+    if (p.length !== 3) return iso;
+    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var m = parseInt(p[1], 10);
+    if (!(m >= 1 && m <= 12)) return iso;
+    return parseInt(p[2], 10) + ' ' + months[m - 1] + ' ' + p[0];
+  }
+
+  /** 14:30:00 -> 2:30 PM */
+  function formatTime(t) {
+    if (!t) return '';
+    var p = String(t).split(':');
+    if (p.length < 2) return '';
+    var h = parseInt(p[0], 10);
+    if (isNaN(h)) return '';
+    var suffix = h >= 12 ? 'PM' : 'AM';
+    var h12 = h % 12 === 0 ? 12 : h % 12;
+    return h12 + ':' + p[1] + ' ' + suffix;
+  }
+
+  function formatMoney(v) {
+    if (v === null || v === undefined || v === '') return null;
+    var n = Number(v);
+    if (!isFinite(n)) return null;
+    try {
+      return n.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
+    } catch (e) {
+      return '₹' + Math.round(n);
+    }
+  }
+
+  function metaPair(label, value) {
+    if (!value) return null;
+    var wrap = document.createElement('div');
+    wrap.appendChild(el('dt', null, label));
+    wrap.appendChild(el('dd', null, value));
+    return wrap;
+  }
+
+  function card(t) {
+    var li = el('li', 'vmrf-card');
+
+    if (t.tender_number) li.appendChild(el('div', 'vmrf-no', t.tender_number));
+
+    var h = el('h3', 'vmrf-title', t.title || 'Untitled tender');
+    if (t.tender_type) h.appendChild(el('span', 'vmrf-tag', t.tender_type));
+    li.appendChild(h);
+
+    // The VMS lets staff write a separate public description; fall back to nothing rather
+    // than leaking the internal one, which this feed deliberately does not send.
+    if (t.university_description) li.appendChild(el('p', 'vmrf-desc', t.university_description));
+
+    var dl = el('dl', 'vmrf-meta');
+    var deadline = formatDate(t.submission_deadline);
+    var dTime = formatTime(t.submission_time);
+    [
+      metaPair('Last date to submit', dTime ? deadline + ', ' + dTime : deadline),
+      metaPair('Opening', t.opening_date ? formatDate(t.opening_date) + (formatTime(t.opening_time) ? ', ' + formatTime(t.opening_time) : '') : null),
+      metaPair('Estimated value', formatMoney(t.estimated_value)),
+      metaPair('EMD', formatMoney(t.emda_amount)),
+      metaPair('Venue', t.opening_venue)
+    ].forEach(function (pair) { if (pair) dl.appendChild(pair); });
+    li.appendChild(dl);
+
+    var foot = el('div', 'vmrf-foot');
+    var days = Number(t.days_remaining);
+    var left;
+    if (isFinite(days) && days > 0) {
+      left = el('span', 'vmrf-left' + (days <= 3 ? ' is-urgent' : ''),
+        days === 1 ? 'Closes tomorrow' : days + ' days left');
+    } else {
+      left = el('span', 'vmrf-left is-urgent', 'Closes today');
+    }
+    foot.appendChild(left);
+
+    var a = el('a', 'vmrf-apply', 'View & apply');
+    a.href = CONFIG.applyUrl;
+    a.rel = 'noopener';
+    foot.appendChild(a);
+
+    li.appendChild(foot);
+    return li;
+  }
+
+  function render(payload) {
+    var list = (payload && payload.tenders) || [];
+    root.innerHTML = '';
+
+    if (!list.length) {
+      root.appendChild(el('div', 'vmrf-state', CONFIG.emptyMessage));
+      return;
+    }
+
+    var ul = el('ul', 'vmrf-list');
+    list.forEach(function (t) { ul.appendChild(card(t)); });
+    root.appendChild(ul);
+
+    var when = new Date();
+    root.appendChild(el('div', 'vmrf-updated', 'Updated ' + when.toLocaleTimeString()));
+  }
+
+  function load() {
+    // Give up rather than spin forever if the portal is unreachable.
+    var controller = ('AbortController' in window) ? new AbortController() : null;
+    var timer = controller ? setTimeout(function () { controller.abort(); }, 12000) : null;
+
+    fetch(endpoint, {
+      method: 'GET',
+      credentials: 'omit',
+      signal: controller ? controller.signal : undefined
+    })
+      .then(function (r) {
+        if (!r.ok) throw new Error('the portal answered HTTP ' + r.status + ' for this address');
+        return r.json();
+      })
+      .then(function (data) {
+        if (timer) clearTimeout(timer);
+        render(data);
+      })
+      .catch(function (err) {
+        if (timer) clearTimeout(timer);
+
+        // The visitor gets plain words; whoever installed this gets the actual reason.
+        var reason = (err && err.name === 'AbortError')
+          ? 'the portal did not answer within 12 seconds'
+          : (err && err.message) || 'the request failed';
+
+        console.error(
+          '[VMRF tenders] Could not load the tender list: ' + reason + '\n' +
+          'Requested: ' + endpoint + '\n' +
+          'Check that this address opens in a browser tab and returns JSON. A failure with no ' +
+          'status usually means the address is wrong, the portal is unreachable from this ' +
+          'network, or the page is https while the portal is http.'
+        );
+
+        unavailable();
+      });
+  }
+
+  load();
+  if (CONFIG.refreshMinutes > 0) {
+    setInterval(load, CONFIG.refreshMinutes * 60 * 1000);
+  }
+})();
+</script>

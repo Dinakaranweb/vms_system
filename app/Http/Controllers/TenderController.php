@@ -117,12 +117,14 @@ class TenderController extends Controller
             'eligibility_criteria' => 'nullable|string',
             'estimated_value' => 'nullable|numeric',
             'start_date' => 'required|date',
-            'submission_deadline' => 'required|date',
+            'submission_deadline' => 'required|date|after_or_equal:start_date',
             'opening_date' => 'nullable|date',
             'tender_type' => 'required|in:online,postal,hybrid',
             'postal_address' => 'required_if:tender_type,postal|nullable|string',
             'documents.*' => 'nullable|file|mimes:pdf,doc,docx|max:10240',
             'questions' => 'nullable|array',
+        ], [
+            'submission_deadline.after_or_equal' => 'The End Date must be on or after the Start Date.',
         ]);
 
         DB::beginTransaction();
@@ -297,10 +299,12 @@ class TenderController extends Controller
             'estimated_value'      => 'nullable|numeric|min:0',
             'emda_amount'          => 'nullable|numeric|min:0',
             'start_date'           => 'required|date',
-            'submission_deadline'  => 'required|date',
+            'submission_deadline'  => 'required|date|after_or_equal:start_date',
             'opening_date'         => 'nullable|date',
             'tender_type'          => 'required|in:online,postal,hybrid',
             'postal_address'       => 'required_if:tender_type,postal|nullable|string',
+        ], [
+            'submission_deadline.after_or_equal' => 'The End Date must be on or after the Start Date.',
         ]);
 
         DB::beginTransaction();
@@ -1188,12 +1192,14 @@ public function ownerIndex(Request $request)
         'eligibility_criteria' => 'nullable|string',
         'estimated_value' => 'nullable|numeric',
         'start_date' => 'required|date',
-        'submission_deadline' => 'required|date',
+        'submission_deadline' => 'required|date|after_or_equal:start_date',
         'opening_date' => 'nullable|date',
         'tender_type' => 'required|in:online,postal,hybrid',
         'postal_address' => 'required_if:tender_type,postal|nullable|string',
         'documents.*' => 'nullable|file|mimes:pdf,doc,docx|max:10240',
         'questions' => 'nullable|array',
+    ], [
+        'submission_deadline.after_or_equal' => 'The End Date must be on or after the Start Date.',
     ]);
 
     DB::beginTransaction();
@@ -1397,10 +1403,12 @@ public function ownerUpdate(Request $request, $id)
         'estimated_value'      => 'nullable|numeric|min:0',
         'emda_amount'          => 'nullable|numeric|min:0',
         'start_date'           => 'required|date',
-        'submission_deadline'  => 'required|date',
+        'submission_deadline'  => 'required|date|after_or_equal:start_date',
         'opening_date'         => 'nullable|date',
         'tender_type'          => 'required|in:online,postal,hybrid',
         'postal_address'       => 'required_if:tender_type,postal|nullable|string',
+    ], [
+        'submission_deadline.after_or_equal' => 'The End Date must be on or after the Start Date.',
     ]);
 
     DB::beginTransaction();
